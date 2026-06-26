@@ -1,0 +1,11 @@
+brains.db
+*.db-wal
+*.db-shm
+.DS_Store
+state/
+__pycache__/
+*.pyc
+docs/handoff/
+
+# personal one-off migration — not part of the published plugin
+migrate.sh

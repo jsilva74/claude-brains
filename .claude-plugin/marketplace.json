@@ -1,0 +1,26 @@
+{
+  "name": "claude-brains",
+  "owner": {
+    "name": "jsilva74",
+    "url": "https://github.com/jsilva74"
+  },
+  "metadata": {
+    "description": "claude-brains marketplace \u2014 lightweight SQLite memory for Claude Code.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "claude-brains",
+      "source": "./",
+      "description": "Persistent memory: compress each session into SQLite + FTS5, recall relevant memories automatically. claude-mem core without the daemon/server/observer overkill.",
+      "version": "1.0.0",
+      "category": "productivity",
+      "keywords": [
+        "memory",
+        "sqlite",
+        "recall",
+        "context"
+      ]
+    }
+  ]
+}

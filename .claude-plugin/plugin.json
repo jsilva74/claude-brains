@@ -1,0 +1,21 @@
+{
+  "name": "claude-brains",
+  "version": "1.0.0",
+  "description": "Lightweight persistent memory for Claude Code. SQLite + FTS5 session compression and recall \u2014 the claude-mem core, no daemon, no server, no observer bloat.",
+  "author": {
+    "name": "jsilva74"
+  },
+  "homepage": "https://github.com/jsilva74/claude-brains",
+  "repository": "https://github.com/jsilva74/claude-brains",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "context",
+    "sqlite",
+    "fts5",
+    "session",
+    "recall",
+    "compression",
+    "continuity"
+  ]
+}
