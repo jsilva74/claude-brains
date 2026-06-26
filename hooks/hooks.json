@@ -36,7 +36,7 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/distill.sh\"",
-            "timeout": 120,
+            "timeout": 15,
             "statusMessage": "Saving memory..."
           }
         ]
@@ -48,7 +48,7 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/distill.sh\"",
-            "timeout": 120,
+            "timeout": 15,
             "statusMessage": "Saving memory before compaction..."
           }
         ]

@@ -17,6 +17,23 @@ def esc(s: str) -> str:
     return str(s).replace("'", "''")
 
 
+def unwrap_envelope(raw: str) -> str:
+    """Return the `.result` payload if `raw` is a `claude -p --output-format json`
+    envelope; otherwise return `raw` unchanged.
+
+    `strict=False` lets unescaped control characters (U+0000-U+001F) inside the
+    payload through instead of aborting the whole parse — the failure mode that
+    silently dropped captures before.
+    """
+    try:
+        env = json.loads(raw, strict=False)
+    except (ValueError, TypeError):
+        return raw
+    if isinstance(env, dict) and isinstance(env.get("result"), str):
+        return env["result"]
+    return raw
+
+
 def main() -> int:
     if len(sys.argv) < 4:
         return 0
@@ -33,11 +50,14 @@ def main() -> int:
     except OSError:
         return 0
 
+    # Unwrap the `claude -p` envelope, then tolerantly extract the first {...}.
+    raw = unwrap_envelope(raw)
+
     match = re.search(r"\{.*\}", raw, re.S)
     if not match:
         return 0
     try:
-        data = json.loads(match.group(0))
+        data = json.loads(match.group(0), strict=False)
     except (ValueError, TypeError):
         return 0
     if not isinstance(data, dict):

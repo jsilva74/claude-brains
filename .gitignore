@@ -2,6 +2,7 @@ brains.db
 *.db-wal
 *.db-shm
 .DS_Store
+.claude/
 state/
 __pycache__/
 *.pyc
