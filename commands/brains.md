@@ -1,6 +1,6 @@
 ---
-description: Inspect and manage claude-brains memory (status, search, list, forget, stats, update)
-argument-hint: "[status|search <q>|list|forget <title>|summaries|projects|stats|update]"
+description: Inspect and manage claude-brains memory (status, search, list, forget, learn, stats, update)
+argument-hint: "[status|search <q>|list|forget <title>|summaries|projects|stats|learn|update]"
 allowed-tools: Bash(bash:*)
 ---
 

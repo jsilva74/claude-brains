@@ -77,12 +77,16 @@ case "$cmd" in
     echo "memories:  $(brains_sql 'SELECT COUNT(*) FROM memories;')"
     echo "summaries: $(brains_sql 'SELECT COUNT(*) FROM summaries;')"
     ;;
+  learn)
+    # Scan the current project's codebase and seed memories from it.
+    exec bash "${SCRIPT_DIR}/learn.sh" "${1:-$cwd}"
+    ;;
   update)
     echo "Update claude-brains with the native plugin manager:"
     echo "  /plugin update claude-brains"
     echo "(SessionStart auto-checks for new releases once per day and nudges you.)"
     ;;
   *)
-    echo "claude-brains commands: status | search <q> | list | forget <title> | summaries | projects | stats | update"
+    echo "claude-brains commands: status | search <q> | list | forget <title> | summaries | projects | stats | learn | update"
     ;;
 esac

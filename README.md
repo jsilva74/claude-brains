@@ -89,6 +89,7 @@ injects a one-line nudge. Apply it with the native plugin manager:
 /brains list              list this project's memories
 /brains forget <title>    delete a memory by exact title
 /brains summaries         recent session summaries
+/brains learn             scan the current project's codebase and seed memories from it
 /brains projects          all known projects
 /brains stats             global totals + DB size
 /brains update            how to update
