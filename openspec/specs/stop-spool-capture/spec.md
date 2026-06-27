@@ -101,17 +101,22 @@ Each `Stop` SHALL spool every turn after the highest already-spooled index for t
 
 ### Requirement: Cheap SessionStart orphan recovery
 
-The system SHALL, on `SessionStart`, list the spool directory (a directory glob, NOT a transcript scan) for sessions that still have spool files and are not the session currently starting, and dispatch the detached distill for each. This MUST be non-blocking so boot and recall are not delayed.
+The system SHALL, on `SessionStart`, list the spool directory (a directory glob, NOT a transcript scan) for sessions whose spool is **stale** — no turn file modified within a recent activity window — and dispatch the detached distill for each. Recovery MUST NOT exclude a session merely because it shares the starting session's id: at `SessionStart` the starting session has not spooled any turn yet, so spool under its id is necessarily leftover from a prior leg (e.g. a resume after a teardown-race loss) and MUST be recovered. This MUST be non-blocking so boot and recall are not delayed.
 
 #### Scenario: Race-lost session recovered
 
 - **WHEN** a prior session left spool files because its distill lost the teardown race, and a later `SessionStart` fires
 - **THEN** orphan recovery dispatches the detached distill for that session, condensing it into the store
 
-#### Scenario: Current session excluded
+#### Scenario: Resume of the same session id recovers its stale spool
 
-- **WHEN** orphan recovery runs and the starting session already has spool files
-- **THEN** the starting session is skipped (its own Stop/SessionEnd will handle it)
+- **WHEN** a session is resumed under the same session id and its prior leg left stale spool files on disk
+- **THEN** orphan recovery dispatches the detached distill for that spool (it is NOT skipped for matching the starting id)
+
+#### Scenario: Active session's spool left alone
+
+- **WHEN** orphan recovery runs while some session's spool was written within the activity window (a live session still spooling)
+- **THEN** that spool is skipped so recovery does not fight the writer; its own `SessionEnd` will distill it
 
 #### Scenario: No orphans
 

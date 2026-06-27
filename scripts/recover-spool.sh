@@ -19,12 +19,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/db.sh
 . "${SCRIPT_DIR}/../lib/db.sh"
 
-# Read the starting session's id so we can skip it (its own Stop/SessionEnd
-# will handle it). Input is optional — recovery still works without it.
-brains_read_input 2>/dev/null || true
-cur_sid="$(brains_field '.session_id' 2>/dev/null || true)"
-cur_sid="$(brains_sid "$cur_sid")"
-
 [ -d "$BRAINS_SPOOL_DIR" ] || exit 0
 
 # --- Prune stale spool (backstop for permanently-failing distills) ----------
@@ -32,15 +26,28 @@ cur_sid="$(brains_sid "$cur_sid")"
 prune_days="${BRAINS_SPOOL_PRUNE_DAYS:-7}"
 find "$BRAINS_SPOOL_DIR" -maxdepth 1 -type f -mtime "+${prune_days}" -delete 2>/dev/null || true
 
-# --- Collect orphan session ids from spool filenames ------------------------
-# A session is recoverable if it still has at least one __NNNNN.txt file.
+# A session is "active" (its spool is being written right now by Stop) if any of
+# its turn files was modified within this window. Such spool is left alone — its
+# own SessionEnd will distill it. Anything older is stale and recoverable.
+# NOTE: we deliberately do NOT skip by current-session-id. At SessionStart the
+# current session has not spooled any turn yet, so any spool under its id is
+# necessarily leftover from a prior leg (a resume of a teardown-race loss) and
+# MUST be recovered — even though it shares the starting session_id. find -mmin
+# granularity is minutes, so round the window up.
+active_secs="${BRAINS_SPOOL_ACTIVE_SECS:-120}"
+active_min=$(( (active_secs + 59) / 60 ))
+
+# --- Collect orphan (stale) session ids from spool filenames ----------------
 orphans=""
 for f in "${BRAINS_SPOOL_DIR}/"*__*.txt; do
   [ -e "$f" ] || continue
   base="${f##*/}"
   sid="${base%%__*}"
   [ -n "$sid" ] || continue
-  [ "$sid" = "$cur_sid" ] && continue       # skip the starting session
+  # Skip a session whose spool was just touched — it's a live session spooling.
+  if find "$BRAINS_SPOOL_DIR" -maxdepth 1 -name "${sid}__*.txt" -mmin "-${active_min}" 2>/dev/null | grep -q .; then
+    continue
+  fi
   case " $orphans " in *" $sid "*) ;; *) orphans="$orphans $sid" ;; esac
 done
 
