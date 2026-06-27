@@ -76,6 +76,12 @@ case "$cmd" in
     echo "projects:  $(brains_sql 'SELECT COUNT(*) FROM projects;')"
     echo "memories:  $(brains_sql 'SELECT COUNT(*) FROM memories;')"
     echo "summaries: $(brains_sql 'SELECT COUNT(*) FROM summaries;')"
+    # Spool = sessions captured on disk but not yet distilled (pending recovery).
+    if [ -d "$BRAINS_SPOOL_DIR" ]; then
+      pend_files=$(find "$BRAINS_SPOOL_DIR" -maxdepth 1 -name '*__*.txt' 2>/dev/null | wc -l | tr -d ' ')
+      pend_sess=$(find "$BRAINS_SPOOL_DIR" -maxdepth 1 -name '*.meta' 2>/dev/null | wc -l | tr -d ' ')
+      echo "spool:     ${pend_sess} pending session(s), ${pend_files} turn file(s)"
+    fi
     ;;
   learn)
     # Scan the current project's codebase and seed memories from it.

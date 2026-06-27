@@ -38,10 +38,29 @@ if [ "${1:-}" = "--worker" ]; then
   transcript="$(brains_field '.transcript_path')"
   cwd="$(brains_field '.cwd')"
   session_id="$(brains_field '.session_id')"
+
+  # --- Pick the source: spool (single source) or legacy transcript tail ---
+  # The spool is the normal path; it survives the teardown race because the
+  # Stop hook wrote it while the host was alive. The transcript tail is a
+  # rollout fallback for sessions that predate spooling.
+  sid="$(brains_sid "$session_id")"
+  meta="${BRAINS_SPOOL_DIR}/${sid}.meta"
+  have_spool=0
+  if [ -n "$sid" ]; then
+    for _f in "${BRAINS_SPOOL_DIR}/${sid}__"*.txt; do
+      [ -e "$_f" ] && { have_spool=1; break; }
+    done
+  fi
+
+  # cwd: hook payload, else the spooled .meta, else fall back.
+  [ -z "$cwd" ] && [ -r "$meta" ] && cwd="$(head -n1 "$meta" 2>/dev/null)"
   [ -z "$cwd" ] && cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 
-  [ -z "$transcript" ] && exit 0
-  [ -r "$transcript" ] || exit 0
+  if [ "$have_spool" = 0 ]; then
+    # No spool — must have a readable transcript to do anything.
+    [ -z "$transcript" ] && exit 0
+    [ -r "$transcript" ] || exit 0
+  fi
 
   brains_ensure_db || exit 0
   project_id="$(brains_project_id "$cwd")"
@@ -53,18 +72,11 @@ if [ "${1:-}" = "--worker" ]; then
   tmp_out="$(mktemp "${TMPDIR:-/tmp}/brains_out.XXXXXX")"
   trap 'rm -f -- "$tmp_convo" "$tmp_out"' EXIT
 
-  tail -n 800 "$transcript" 2>/dev/null \
-    | jq -r '
-        select(.type == "user" or .type == "assistant")
-        | .type as $role
-        | (.message.content // .message)
-        | if type == "array" then (map(select(.type == "text") | .text) | join("\n"))
-          elif type == "string" then .
-          else "" end
-        | select(length > 0)
-        | "[\($role)] \(.)"
-      ' 2>/dev/null \
-    | tail -c 24000 > "$tmp_convo"
+  if [ "$have_spool" = 1 ]; then
+    cat "${BRAINS_SPOOL_DIR}/${sid}__"*.txt 2>/dev/null | tail -c 24000 > "$tmp_convo"
+  else
+    brains_turns_text "$transcript" | tail -c 24000 > "$tmp_convo"
+  fi
 
   # Skip trivial sessions — not worth a model call.
   if [ "$(wc -c < "$tmp_convo" 2>/dev/null || echo 0)" -lt 400 ]; then
@@ -110,8 +122,25 @@ if [ "${1:-}" = "--worker" ]; then
   [ -s "$tmp_out" ] || exit 0
 
   # --- Parse -> SQL -> DB ------------------------------------------------
-  python3 "${SCRIPT_DIR}/../lib/parse-distill.py" "$tmp_out" "$project_id" "$session_id" 2>/dev/null \
-    | sqlite3 "$BRAINS_DB" 2>/dev/null || true
+  # Capture the generated SQL so we can tell success (non-empty SQL applied
+  # cleanly) from a garbage/empty model reply. Only on success do we delete the
+  # session's spool — the single-source cleanup. Writes are idempotent upserts,
+  # so a crash between apply and delete just re-runs harmlessly next time.
+  tmp_sql="$(mktemp "${TMPDIR:-/tmp}/brains_sql.XXXXXX")"
+  # shellcheck disable=SC2064
+  trap "rm -f -- \"$tmp_convo\" \"$tmp_out\" \"$tmp_sql\"" EXIT
+
+  python3 "${SCRIPT_DIR}/../lib/parse-distill.py" "$tmp_out" "$project_id" "$session_id" 2>/dev/null > "$tmp_sql"
+
+  if [ -s "$tmp_sql" ]; then
+    if "$BRAINS_SQLITE" "$BRAINS_DB" < "$tmp_sql" 2>/dev/null; then
+      # Success: drop this session's spool (turn files + meta).
+      if [ "$have_spool" = 1 ]; then
+        rm -f -- "${BRAINS_SPOOL_DIR}/${sid}__"*.txt "$meta" 2>/dev/null || true
+      fi
+    fi
+  fi
+  # Empty SQL (failed parse) -> leave spool intact for a later retry.
 
   exit 0
 fi

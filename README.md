@@ -9,10 +9,16 @@ queue, or per-tool observer.
 
 ## What it does
 
-- **Capture** — on `SessionEnd` and `PreCompact`, a cheap headless `claude -p`
-  reads the transcript tail and distills it into:
+- **Capture** — after every assistant turn (`Stop`), the raw turn is spooled to
+  disk as plain files — a sub-millisecond write while the host is alive, so it
+  can't be lost to the session-teardown race. On `SessionEnd`/`PreCompact` the
+  remaining turns are flushed and a cheap headless `claude -p` distills the
+  spool into:
   - a short **summary** (a resumable handoff note), and
   - 0–8 durable **memories** (`decision` / `fact` / `preference` / `gotcha` / `state`).
+  On success the session's spool is deleted. If the distill loses the teardown
+  race, the spool stays on disk and the next `SessionStart` recovers it — so a
+  session is never lost, only condensed slightly later.
 - **Recall** — on `SessionStart`, the last summary + top memories for the project
   are injected. On every `UserPromptSubmit`, an FTS5 match surfaces the memories
   relevant to what you just asked.

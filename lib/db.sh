@@ -21,6 +21,9 @@ BRAINS_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 BRAINS_DIR="${BRAINS_CONFIG_DIR}/brains"
 BRAINS_DB="${BRAINS_DIR}/brains.db"
 BRAINS_STATE_DIR="${BRAINS_DIR}/state"
+# On-disk spool of raw per-turn transcript deltas (written by the Stop hook,
+# consumed + deleted by distill). Ephemeral; the durable store is BRAINS_DB.
+BRAINS_SPOOL_DIR="${BRAINS_DIR}/spool"
 
 # Resolve plugin root (where this lib lives) so scripts can find siblings.
 # shellcheck disable=SC2128
@@ -171,6 +174,38 @@ brains_emit_context() {
     printf '{"hookSpecificOutput":{"hookEventName":"%s","additionalContext":"%s"}}' "$event" "$esc"
   fi
 }
+
+# --- Transcript turn extraction ------------------------------------------
+# Shared jq program: keep only user/assistant turns that carry text, and render
+# each as a single "[role] text" string. Used by both the spool writer (Stop)
+# and distill's legacy transcript-tail fallback so the format stays identical.
+BRAINS_TURNS_FILTER='
+  select(.type == "user" or .type == "assistant")
+  | .type as $role
+  | (.message.content // .message)
+  | if type == "array" then (map(select(.type == "text") | .text) | join("\n"))
+    elif type == "string" then .
+    else "" end
+  | select(length > 0)
+  | "[\($role)] \(.)"
+'
+
+# Emit one NDJSON-encoded turn string per line from a transcript tail. JSON
+# encoding keeps each (possibly multi-line) turn on a single line, so turn index
+# == line number — the basis for the spool high-water mark. Decode a line with
+# `jq -r .`. Requires jq.
+brains_turns_ndjson() {
+  tail -n 800 "$1" 2>/dev/null | jq -r "${BRAINS_TURNS_FILTER} | @json" 2>/dev/null
+}
+
+# Emit the plain "[role] text" turns (legacy distill input) from a transcript.
+brains_turns_text() {
+  tail -n 800 "$1" 2>/dev/null | jq -r "$BRAINS_TURNS_FILTER" 2>/dev/null
+}
+
+# Sanitize a session_id into a safe filename stem (uuids are already safe; this
+# is defensive against anything unexpected in the field).
+brains_sid() { printf '%s' "${1//[^A-Za-z0-9._-]/_}"; }
 
 # Read hook stdin JSON into BRAINS_INPUT once; extract fields via brains_field.
 brains_read_input() { BRAINS_INPUT="$(cat)"; }

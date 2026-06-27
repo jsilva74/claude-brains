@@ -1,5 +1,5 @@
 {
-  "description": "claude-brains: capture sessions into SQLite (SessionEnd/PreCompact), recall on SessionStart + UserPromptSubmit, silent update check.",
+  "description": "claude-brains: spool raw turns to disk on Stop (teardown-race-proof), distill the spool into SQLite (SessionEnd/PreCompact flush + dispatch, SessionStart orphan recovery), recall on SessionStart + UserPromptSubmit, silent update check.",
   "hooks": {
     "SessionStart": [
       {
@@ -10,6 +10,12 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/inject.sh\"",
             "timeout": 10,
             "statusMessage": "Recalling memory..."
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/recover-spool.sh\"",
+            "timeout": 10,
+            "statusMessage": "Recovering unsaved sessions..."
           },
           {
             "type": "command",
@@ -30,9 +36,25 @@
         ]
       }
     ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/spool-turn.sh\"",
+            "timeout": 8
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/spool-turn.sh\"",
+            "timeout": 8
+          },
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/distill.sh\"",
@@ -45,6 +67,11 @@
     "PreCompact": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/spool-turn.sh\"",
+            "timeout": 8
+          },
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/distill.sh\"",
