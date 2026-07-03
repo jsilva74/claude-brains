@@ -78,8 +78,15 @@ if [ "${1:-}" = "--worker" ]; then
     brains_turns_text "$transcript" | tail -c 24000 > "$tmp_convo"
   fi
 
-  # Skip trivial sessions — not worth a model call.
+  # Skip trivial sessions — not worth a model call. A finished spool this small
+  # is *permanently* trivial (it only grows while a session is live, and distill
+  # never runs on a live session), so this is a terminal state, not a retryable
+  # failure: drop the spool instead of leaving it to be re-dispatched every
+  # SessionStart until the 7-day prune.
   if [ "$(wc -c < "$tmp_convo" 2>/dev/null || echo 0)" -lt 400 ]; then
+    if [ "$have_spool" = 1 ]; then
+      rm -f -- "${BRAINS_SPOOL_DIR}/${sid}__"*.txt "$meta" 2>/dev/null || true
+    fi
     exit 0
   fi
 

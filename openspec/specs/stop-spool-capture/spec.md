@@ -57,7 +57,7 @@ Each `Stop` SHALL spool every turn after the highest already-spooled index for t
 
 ### Requirement: Distill consumes the spool as single source
 
-`distill.sh` SHALL build its `claude -p` input from a session's spool files (`<session_id>__*.txt`, in index order) rather than the transcript tail. On a successful parse it MUST write the summary + memories and delete that session's spool files (turn files and `.meta`) so they are not consumed again.
+`distill.sh` SHALL build its `claude -p` input from a session's spool files (`<session_id>__*.txt`, in index order) rather than the transcript tail. On a successful parse it MUST write the summary + memories and delete that session's spool files (turn files and `.meta`) so they are not consumed again. A finished spool too small to be worth a model call (below the trivial-size threshold) MUST also be deleted without distilling: it is a terminal state — a completed spool only grows while a session is live, and distill never runs on a live session — so leaving it would only cause it to be re-dispatched and re-skipped on every future `SessionStart` until the prune backstop.
 
 #### Scenario: Successful distill
 
@@ -69,6 +69,12 @@ Each `Stop` SHALL spool every turn after the highest already-spooled index for t
 
 - **WHEN** distill runs but the model returns no usable JSON
 - **THEN** the spool files are NOT deleted, so a later trigger can retry
+
+#### Scenario: Trivial session deleted without distilling
+
+- **WHEN** distill runs for a session whose finished spool is below the trivial-size threshold
+- **THEN** no `claude -p` call is made
+- **AND** that session's spool files (turn files and `.meta`) are deleted, so it is not re-dispatched on future `SessionStart` recoveries
 
 #### Scenario: Idempotent re-consume
 

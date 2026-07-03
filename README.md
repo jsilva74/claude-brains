@@ -16,9 +16,12 @@ queue, or per-tool observer.
   spool into:
   - a short **summary** (a resumable handoff note), and
   - 0–8 durable **memories** (`decision` / `fact` / `preference` / `gotcha` / `state`).
-  On success the session's spool is deleted. If the distill loses the teardown
-  race, the spool stays on disk and the next `SessionStart` recovers it — so a
-  session is never lost, only condensed slightly later.
+  On success the session's spool is deleted. A session too small to be worth a
+  model call (a finished spool under the trivial-size threshold) is also deleted
+  without distilling — that's a terminal state, not a retryable failure, so it
+  isn't re-dispatched on every future `SessionStart`. If the distill loses the
+  teardown race, the spool stays on disk and the next `SessionStart` recovers it
+  — so a session is never lost, only condensed slightly later.
 - **Recall** — on `SessionStart`, the last summary + top memories for the project
   are injected. On every `UserPromptSubmit`, an FTS5 match surfaces the memories
   relevant to what you just asked.
