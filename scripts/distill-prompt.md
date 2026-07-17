@@ -9,7 +9,8 @@ Shape:
   "summary": "2-4 sentence recap: what was worked on and the current state / next step.",
   "memories": [
     { "type": "decision|fact|preference|gotcha|state", "title": "short unique key", "body": "1-3 sentences" }
-  ]
+  ],
+  "obsolete": ["existing title the session proved no longer true", "..."]
 }
 
 Rules:
@@ -23,5 +24,13 @@ Rules:
 - SKIP ephemeral chatter, one-off questions, and anything already obvious from the repo.
 - `title` is a stable dedup key. If a memory updates an existing fact, REUSE the same
   title from the "Existing memories" list so it gets overwritten, not duplicated.
+- `title` is an IDENTITY, not a description: NEVER embed a version, date, or status
+  in it (`plugin_v1.2.1_live` is wrong; use `plugin_release_status` and put the
+  version in `body`). Otherwise every update creates a contradictory duplicate.
+- `obsolete`: 0 to 8 titles copied EXACTLY from the "Existing memories" list that
+  this session proved outdated — work recorded as in-progress that is now done,
+  a decision that was reversed, a fact that was replaced. They will be archived.
+  Be conservative: only list a title when the transcript shows explicit evidence;
+  when in doubt, leave it out. If none, return "obsolete": [].
 - If nothing durable happened, return {"summary": "...", "memories": []}.
 - Never invent. Only record what the transcript actually shows.

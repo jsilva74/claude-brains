@@ -27,6 +27,18 @@ queue, or per-tool observer.
   relevant to what you just asked.
 - **Dedup & bounded** — memories are keyed by `(project, title)` and upserted, so
   the store stays curated instead of growing without limit.
+- **Self-maintaining** — the store keeps itself fresh, all outside the session's
+  hot path (pure-SQL hooks stay microsecond-fast):
+  - the distiller marks memories the session proved outdated (`obsolete`) and
+    they are archived in the same model call — no extra cost;
+  - only the newest 5 `state` memories stay active per project (older ones are
+    ephemeral by nature and get archived);
+  - when a project accumulates enough (>120 active memories, rate-limited to at
+    most once per 5 distills), an automatic **GC** pass consolidates duplicates
+    and archives superseded entries — one bounded `claude -p` call in the same
+    detached worker;
+  - nothing a model decides is ever deleted: archiving is a soft-delete,
+    recoverable via `/brains restore` for 30 days before the physical purge.
 
 ## Storage
 
@@ -34,7 +46,7 @@ Everything lives in one file: `~/.claude/brains/brains.db` (WAL mode).
 
 ```
 projects(id, slug, path, created_at)
-memories(id, project_id, type, title, body, created_at, updated_at)   + memories_fts
+memories(id, project_id, type, title, body, created_at, updated_at, archived_at)   + memories_fts
 summaries(id, project_id, session_id, summary, created_at)            + summaries_fts
 ```
 
@@ -96,7 +108,10 @@ injects a one-line nudge. Apply it with the native plugin manager:
 /brains status            counts + last summary for the current project
 /brains search <query>    FTS5 search across all projects
 /brains list              list this project's memories
-/brains forget <title>    delete a memory by exact title
+/brains forget <title>    archive a memory by exact title (restorable for 30 days)
+/brains archived          list this project's archived memories
+/brains restore <title>   un-archive a memory by exact title
+/brains gc                force a memory-consolidation pass now (ignores the auto gate)
 /brains summaries         recent session summaries
 /brains learn             scan the current project's codebase and seed memories from it
 /brains projects          all known projects
@@ -109,6 +124,11 @@ injects a one-line nudge. Apply it with the native plugin manager:
 - `CLAUDE_CONFIG_DIR` — overrides the base dir (default `~/.claude`); the DB lives
   under `<config-dir>/brains/`.
 - Capture model — set in `scripts/distill.sh` (a fast, cheap model by default).
+- Maintenance tuning (env vars, all optional): `BRAINS_STATE_KEEP` (active `state`
+  memories kept per project, default 5), `BRAINS_GC_THRESHOLD` (active-memory
+  count that arms the auto-GC, default 120), `BRAINS_GC_MIN_DISTILLS` /
+  `BRAINS_GC_MAX_DISTILLS` (GC rate limits, defaults 5 / 25), `BRAINS_GC_SLICE`
+  (memories per GC pass, default 80).
 
 ## Uninstall
 

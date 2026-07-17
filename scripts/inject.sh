@@ -21,7 +21,7 @@ last_summary="$(brains_sql "SELECT summary FROM summaries WHERE project_id=${pro
 
 memories="$(brains_sql "
   SELECT '- (' || type || ') ' || title || ': ' || body
-  FROM memories WHERE project_id=${project_id}
+  FROM memories WHERE project_id=${project_id} AND archived_at IS NULL
   ORDER BY updated_at DESC LIMIT 25;
 ")"
 

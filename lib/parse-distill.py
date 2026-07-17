@@ -6,6 +6,7 @@ Reads the model output (which should be a JSON object), tolerantly extracts the
 first {...} block, validates it, and prints SQL statements on stdout to be piped
 into `sqlite3 brains.db`. Prints nothing (exit 0) when there is nothing to store.
 """
+
 import json
 import re
 import sys
@@ -92,6 +93,21 @@ def main() -> int:
                 f"VALUES({pid_int}, '{esc(mtype)}', '{esc(title)}', '{esc(body)}') "
                 "ON CONFLICT(project_id, title) DO UPDATE SET "
                 "body=excluded.body, type=excluded.type, updated_at=datetime('now');"
+            )
+
+    obsolete = data.get("obsolete")
+    if isinstance(obsolete, list):
+        for title in obsolete[:8]:
+            if not isinstance(title, str):
+                continue
+            title = title.strip()[:200]
+            if not title:
+                continue
+            # Soft-delete: archived memories leave inject/recall immediately and
+            # are physically purged 30 days later. Unknown titles are a no-op.
+            out.append(
+                "UPDATE memories SET archived_at=datetime('now') "
+                f"WHERE project_id={pid_int} AND title='{esc(title)}' AND archived_at IS NULL;"
             )
 
     if out:

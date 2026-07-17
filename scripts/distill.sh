@@ -91,7 +91,7 @@ if [ "${1:-}" = "--worker" ]; then
   fi
 
   # --- Existing memory titles for dedup guidance -------------------------
-  existing="$(brains_sql "SELECT '- ' || type || ': ' || title FROM memories WHERE project_id=${project_id} ORDER BY updated_at DESC LIMIT 40;")"
+  existing="$(brains_sql "SELECT '- ' || type || ': ' || title FROM memories WHERE project_id=${project_id} AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 40;")"
 
   # --- Assemble prompt ---------------------------------------------------
   {
@@ -144,6 +144,38 @@ if [ "${1:-}" = "--worker" ]; then
       # Success: drop this session's spool (turn files + meta).
       if [ "$have_spool" = 1 ]; then
         rm -f -- "${BRAINS_SPOOL_DIR}/${sid}__"*.txt "$meta" 2>/dev/null || true
+      fi
+
+      # --- Post-distill maintenance (pure SQL, microseconds) -------------
+      # Physically purge memories archived more than 30 days ago; until then
+      # they stay recoverable via `brains restore`.
+      brains_sql "DELETE FROM memories WHERE archived_at IS NOT NULL AND archived_at < datetime('now', '-30 days');"
+
+      # `state` memories are ephemeral by nature: keep only the newest K
+      # active per project, archive the rest.
+      state_keep="${BRAINS_STATE_KEEP:-5}"
+      case "$state_keep" in ''|*[!0-9]*) state_keep=5 ;; esac
+      brains_sql "UPDATE memories SET archived_at=datetime('now')
+        WHERE project_id=${project_id} AND type='state' AND archived_at IS NULL
+          AND id NOT IN (SELECT id FROM memories
+                         WHERE project_id=${project_id} AND type='state' AND archived_at IS NULL
+                         ORDER BY updated_at DESC LIMIT ${state_keep});"
+
+      # --- Auto-GC gate --------------------------------------------------
+      # Consolidate the corpus when it accumulates. The >=min-distills leg
+      # prevents a GC storm on projects that legitimately stay above the
+      # threshold; the >=max leg guarantees periodic cleanup regardless.
+      gc_min="${BRAINS_GC_MIN_DISTILLS:-5}";  case "$gc_min"  in ''|*[!0-9]*) gc_min=5   ;; esac
+      gc_max="${BRAINS_GC_MAX_DISTILLS:-25}"; case "$gc_max"  in ''|*[!0-9]*) gc_max=25  ;; esac
+      gc_thr="${BRAINS_GC_THRESHOLD:-120}";   case "$gc_thr"  in ''|*[!0-9]*) gc_thr=120 ;; esac
+      brains_sql "INSERT INTO meta(key,value) VALUES('gc_distill_count:${project_id}','1')
+        ON CONFLICT(key) DO UPDATE SET value=CAST(value AS INTEGER)+1;"
+      gc_count="$(brains_sql "SELECT COALESCE(value,'0') FROM meta WHERE key='gc_distill_count:${project_id}';")"
+      case "$gc_count" in ''|*[!0-9]*) gc_count=0 ;; esac
+      active="$(brains_sql "SELECT COUNT(*) FROM memories WHERE project_id=${project_id} AND archived_at IS NULL;")"
+      case "$active" in ''|*[!0-9]*) active=0 ;; esac
+      if [ "$gc_count" -ge "$gc_min" ] && { [ "$active" -gt "$gc_thr" ] || [ "$gc_count" -ge "$gc_max" ]; }; then
+        bash "${SCRIPT_DIR}/gc.sh" "$project_id" >/dev/null 2>&1 || true
       fi
     fi
   fi

@@ -116,6 +116,20 @@ brains_ensure_db() {
     # Cheap re-apply of CREATE IF NOT EXISTS keeps schema current across updates.
     brains_schema_sql | "$BRAINS_SQLITE" "$BRAINS_DB" >/dev/null 2>&1 || true
   fi
+  brains_migrate_db
+  return 0
+}
+
+# In-place migrations for columns that CREATE IF NOT EXISTS can't add.
+# Idempotent: each step probes the live schema before altering.
+brains_migrate_db() {
+  # v1.3.0: soft-delete column. NULL = active; set = archived (hidden from
+  # inject/recall, physically purged 30 days later).
+  local has_col
+  has_col="$(brains_sql "SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name='archived_at';")"
+  if [ "${has_col:-0}" = "0" ]; then
+    brains_sql "ALTER TABLE memories ADD COLUMN archived_at TEXT;"
+  fi
   return 0
 }
 

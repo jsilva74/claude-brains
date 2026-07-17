@@ -29,7 +29,7 @@ hits="$(brains_sql "
   SELECT '- (' || m.type || ') ' || m.title || ': ' || m.body
   FROM memories_fts f
   JOIN memories m ON m.id = f.rowid
-  WHERE m.project_id=${project_id} AND f.memories_fts MATCH '${ematch}'
+  WHERE m.project_id=${project_id} AND m.archived_at IS NULL AND f.memories_fts MATCH '${ematch}'
   ORDER BY rank LIMIT 5;
 ")"
 
