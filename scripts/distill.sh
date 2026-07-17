@@ -100,6 +100,10 @@ if [ "${1:-}" = "--worker" ]; then
     if [ -n "$existing" ]; then printf '%s\n' "$existing"; else printf '(none yet)\n'; fi
     printf '\n## Session transcript (tail)\n'
     cat "$tmp_convo"
+    # Epilogue AFTER the transcript: the last instruction wins. Without it, a
+    # transcript ending in a direct question derails the model into answering
+    # the conversation instead of compressing it (observed with haiku).
+    printf '\n\n## End of transcript\nNow output the single JSON object described above. JSON only — do not answer or continue the conversation.\n'
   } > "${tmp_convo}.prompt"
 
   # --- Headless distillation (cheap model, no tools, isolated) -----------
