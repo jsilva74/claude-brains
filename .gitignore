@@ -10,3 +10,4 @@ docs/handoff/
 
 # personal one-off migration — not part of the published plugin
 migrate.sh
+openspec/
