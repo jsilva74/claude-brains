@@ -108,7 +108,6 @@ while IFS=$'\t' read -r mid mtitle mbody; do
     missing="${missing:+$missing, }$a"
   done <<< "$anchors"
   if [ -z "$missing" ]; then clean_ids="${clean_ids:+$clean_ids,}$mid"; continue; fi
-  suspect_ids="${suspect_ids:+$suspect_ids,}$mid"
 
   # Candidates by basename: a rename usually keeps the file name, and this is
   # what lets the model rewrite the path instead of throwing the memory away.
@@ -118,16 +117,23 @@ while IFS=$'\t' read -r mid mtitle mbody; do
   cands="$(grep -F "/$base" "$tmp_idx" | head -5 | tr '\n' ' ')"
   [ -z "$cands" ] && cands="$(grep -xF "$base" "$tmp_idx" | head -5 | tr '\n' ' ')"
 
+  # No rename target means there is nothing to correct the path TO, and the
+  # tree only speaks for this repo: the file may live on a VPS, in a container,
+  # on a deploy target, or in something gitignored. Asking the model what to do
+  # here only invites it to delete the location. Treat the memory as checked and
+  # never show it.
+  if [ -z "$cands" ]; then
+    clean_ids="${clean_ids:+$clean_ids,}$mid"
+    continue
+  fi
+  suspect_ids="${suspect_ids:+$suspect_ids,}$mid"
+
   suspects=$((suspects + 1))
   {
     printf -- '- title: %s\n' "$mtitle"
     printf -- '  body: %s\n' "$mbody"
     printf -- '  missing from the repo: %s\n' "$missing"
-    if [ -n "$cands" ]; then
-      printf -- '  files with that name that DO exist: %s\n' "$cands"
-    else
-      printf -- '  files with that name that DO exist: (none)\n'
-    fi
+    printf -- '  files with that name that DO exist: %s\n' "$cands"
   } >> "$tmp_sus"
 done < "$tmp_rows"
 
@@ -167,7 +173,7 @@ rm -f -- "${tmp_sus}.prompt"
 [ -z "$resp" ] && exit 0
 
 printf '%s' "$resp" > "$tmp_out"
-python3 "${SCRIPT_DIR}/../lib/parse-gc.py" "$tmp_out" "$project_id" 2>/dev/null > "$tmp_sql"
+python3 "${SCRIPT_DIR}/../lib/parse-verify.py" "$tmp_out" "$project_id" 2>/dev/null > "$tmp_sql"
 if [ ! -s "$tmp_sql" ]; then
   # Empty SQL means the reply was an error envelope or garbage, NOT a verdict of
   # "nothing to change" — the model always has something to say about a path
