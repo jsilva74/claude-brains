@@ -58,8 +58,11 @@ tmp_idx="$(mktemp "${TMPDIR:-/tmp}/brains_vidx.XXXXXX")"
 tmp_sus="$(mktemp "${TMPDIR:-/tmp}/brains_vsus.XXXXXX")"
 tmp_out="$(mktemp "${TMPDIR:-/tmp}/brains_vout.XXXXXX")"
 tmp_sql="$(mktemp "${TMPDIR:-/tmp}/brains_vsql.XXXXXX")"
+# Every (title, missing-path) pair this run detected. The parser refuses any
+# rename outside it, so the model cannot volunteer one it read in the text.
+tmp_allow="$(mktemp "${TMPDIR:-/tmp}/brains_vallow.XXXXXX")"
 # shellcheck disable=SC2064
-trap "rm -rf -- \"$lock\"; rm -f -- \"$tmp_rows\" \"$tmp_idx\" \"$tmp_sus\" \"$tmp_out\" \"$tmp_sql\"" EXIT
+trap "rm -rf -- \"$lock\"; rm -f -- \"$tmp_rows\" \"$tmp_idx\" \"$tmp_sus\" \"$tmp_out\" \"$tmp_sql\" \"$tmp_allow\"" EXIT
 
 # --- Batch: least recently verified first ---------------------------------
 # NULLs sort first, so never-checked memories drain before re-checks.
@@ -128,6 +131,10 @@ while IFS=$'\t' read -r mid mtitle mbody; do
   fi
   suspect_ids="${suspect_ids:+$suspect_ids,}$mid"
 
+  while IFS= read -r a; do
+    [ -n "$a" ] && printf '%s\t%s\n' "$mtitle" "$a" >> "$tmp_allow"
+  done <<< "$(printf '%s' "$missing" | tr ',' '\n' | sed 's/^ *//;s/ *$//')"
+
   suspects=$((suspects + 1))
   {
     printf -- '- title: %s\n' "$mtitle"
@@ -173,7 +180,7 @@ rm -f -- "${tmp_sus}.prompt"
 [ -z "$resp" ] && exit 0
 
 printf '%s' "$resp" > "$tmp_out"
-python3 "${SCRIPT_DIR}/../lib/parse-verify.py" "$tmp_out" "$project_id" 2>/dev/null > "$tmp_sql"
+python3 "${SCRIPT_DIR}/../lib/parse-verify.py" "$tmp_out" "$project_id" "$tmp_allow" 2>/dev/null > "$tmp_sql"
 if [ ! -s "$tmp_sql" ]; then
   # Empty SQL means the reply was an error envelope or garbage, NOT a verdict of
   # "nothing to change" — the model always has something to say about a path

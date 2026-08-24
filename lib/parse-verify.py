@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Parse the verifier's rename plan into safe SQL for the brains DB.
 
-Usage: parse-verify.py <text-file> <project_id>
+Usage: parse-verify.py <text-file> <project_id> <allowed-file>
+
+<allowed-file> holds one "title<TAB>missing-path" line per pair the verifier
+itself detected. Anything outside it is refused: the model reads the memory
+text and will otherwise volunteer a "rename" for something that was never
+missing — that is how `sif.core.clock` became `sif.clock`.
 
 The model answers one question only — "this path became that path" — and the
 edit is a literal substitution done by SQLite's REPLACE(). It cannot lose a
@@ -36,6 +41,21 @@ def main() -> int:
     if len(sys.argv) < 3:
         return 0
     text_path, pid = sys.argv[1], sys.argv[2]
+    allowed_path = sys.argv[3] if len(sys.argv) > 3 else ""
+
+    # (title, from) pairs this run actually found missing. No allowlist means
+    # nothing is allowed: a caller that forgets to pass it gets a no-op, never
+    # an unchecked rewrite.
+    allowed = set()
+    if allowed_path:
+        try:
+            with open(allowed_path, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    t, _, f = line.rstrip("\n").partition("\t")
+                    if t and f:
+                        allowed.add((t, f))
+        except OSError:
+            pass
 
     try:
         pid_int = int(pid)
@@ -72,6 +92,8 @@ def main() -> int:
             if not title or not old or not new or old == new:
                 continue
             if not PATH_RE.match(old) or not PATH_RE.match(new):
+                continue
+            if (title, old) not in allowed:
                 continue
             # Guarded by `INSTR`: if the stored text does not literally contain
             # the old path, the model misquoted it and the row is left alone.
