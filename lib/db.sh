@@ -136,6 +136,30 @@ brains_migrate_db() {
 # Run a SQL statement, discard errors. Usage: brains_sql "SELECT ..."
 brains_sql() { "$BRAINS_SQLITE" "$BRAINS_DB" "$1" 2>/dev/null; }
 
+# Resolve the durable project anchor for a session.
+#
+# The payload `.cwd` is NOT stable: the Bash tool keeps its working directory
+# between calls, so an agent that runs `cd backend` mid-session moves it. Hooks
+# firing later credit the memory to whatever subdirectory the agent last
+# navigated to, shattering one project into many. Anchor on where the session
+# was opened instead.
+#
+# Order: CLAUDE_PROJECT_DIR (host-set, immutable per session) -> the HIGHEST
+# ancestor carrying a project marker -> the given path. Highest, not nearest:
+# a nested `backend/.claude` must never win over the real root.
+brains_anchor_dir() {
+  local fallback="${1:-$PWD}"
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+    printf '%s' "$CLAUDE_PROJECT_DIR"; return 0
+  fi
+  local d="$fallback" best=""
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "$HOME" ]; do
+    if [ -e "$d/CLAUDE.md" ] || [ -d "$d/.claude" ]; then best="$d"; fi
+    d="$(dirname "$d")"
+  done
+  printf '%s' "${best:-$fallback}"
+}
+
 # --- Project resolution --------------------------------------------------
 # slug mirrors Claude Code's project dir convention: every "/" becomes "-".
 brains_slug_for() {

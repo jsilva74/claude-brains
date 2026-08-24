@@ -23,7 +23,9 @@ brains_have_sqlite || { echo "claude-brains: sqlite3 not found."; exit 1; }
 brains_ensure_db   || { echo "claude-brains: could not open DB at $BRAINS_DB"; exit 1; }
 
 cmd="${1:-status}"; shift || true
-cwd="$PWD"
+# Same anchor the hooks use, so `/brains` from a subdirectory still resolves
+# to the project the memories were filed under.
+cwd="$(brains_anchor_dir "$PWD")"
 
 pid_for() { brains_project_id_existing "$1"; }
 

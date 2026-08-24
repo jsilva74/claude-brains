@@ -52,9 +52,16 @@ if [ "${1:-}" = "--worker" ]; then
     done
   fi
 
-  # cwd: hook payload, else the spooled .meta, else fall back.
-  [ -z "$cwd" ] && [ -r "$meta" ] && cwd="$(head -n1 "$meta" 2>/dev/null)"
-  [ -z "$cwd" ] && cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
+  # Project anchor, most trustworthy first:
+  #   1. brains_anchor  - stamped by the launcher while CLAUDE_PROJECT_DIR was
+  #                       still in the environment (setsid drops it).
+  #   2. the spooled .meta - the anchor recorded at the session's first turn.
+  #   3. payload .cwd    - last resort only; the agent may have `cd`-ed away
+  #                        mid-session, which would credit another project.
+  anchor="$(brains_field '.brains_anchor')"
+  [ -z "$anchor" ] && [ -r "$meta" ] && anchor="$(head -n1 "$meta" 2>/dev/null)"
+  [ -z "$anchor" ] && anchor="$(brains_anchor_dir "${cwd:-${CLAUDE_PROJECT_DIR:-$PWD}}")"
+  cwd="$anchor"
 
   if [ "$have_spool" = 0 ]; then
     # No spool — must have a readable transcript to do anything.
@@ -91,7 +98,12 @@ if [ "${1:-}" = "--worker" ]; then
   fi
 
   # --- Existing memory titles for dedup guidance -------------------------
-  existing="$(brains_sql "SELECT '- ' || type || ': ' || title FROM memories WHERE project_id=${project_id} AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 40;")"
+  # This window is also the reconciliation window: haiku can only mark a title
+  # `obsolete` if it is listed here. Too small and stale memories older than the
+  # cutoff become immortal — invisible to every future reconciliation pass.
+  rec_win="${BRAINS_RECONCILE_WINDOW:-150}"
+  case "$rec_win" in ''|*[!0-9]*) rec_win=150 ;; esac
+  existing="$(brains_sql "SELECT '- ' || type || ': ' || title FROM memories WHERE project_id=${project_id} AND archived_at IS NULL ORDER BY updated_at DESC LIMIT ${rec_win};")"
 
   # --- Assemble prompt ---------------------------------------------------
   {
@@ -165,8 +177,19 @@ if [ "${1:-}" = "--worker" ]; then
                          WHERE project_id=${project_id} AND type='state' AND archived_at IS NULL
                          ORDER BY updated_at DESC LIMIT ${state_keep});"
 
+      # --- Directed reconciliation ---------------------------------------
+      # A new decision is the moment the rest of the corpus can become wrong,
+      # so the decision itself drives the cleanup: everything it matches gets
+      # reconciled now, instead of waiting for the maintenance sweep's rotating
+      # seed to land on the same subject some passes later.
+      decided="$(brains_sql "SELECT title || ' ' || body FROM memories
+        WHERE project_id=${project_id} AND archived_at IS NULL AND type='decision'
+          AND updated_at >= datetime('now','-2 minutes');")"
+      if [ -n "$decided" ]; then
+        bash "${SCRIPT_DIR}/gc.sh" "$project_id" --seed "$decided" >/dev/null 2>&1 || true
+      fi
+
       # --- Auto-GC gate --------------------------------------------------
-      # Consolidate the corpus when it accumulates. The >=min-distills leg
       # prevents a GC storm on projects that legitimately stay above the
       # threshold; the >=max leg guarantees periodic cleanup regardless.
       gc_min="${BRAINS_GC_MIN_DISTILLS:-5}";  case "$gc_min"  in ''|*[!0-9]*) gc_min=5   ;; esac
@@ -200,7 +223,13 @@ brains_has jq       || exit 0
 brains_has python3  || exit 0   # required to daemonize the worker
 
 stash="$(mktemp "${TMPDIR:-/tmp}/brains_stash.XXXXXX")" || exit 0
-printf '%s' "$input" > "$stash"
+# Stamp the project anchor NOW: the detached worker runs under setsid and no
+# longer sees CLAUDE_PROJECT_DIR, and the payload's own .cwd may already have
+# drifted to wherever the agent last `cd`-ed.
+BRAINS_INPUT="$input"
+_anchor="$(brains_anchor_dir "$(brains_field '.cwd')")"
+printf '%s' "$input" | jq --arg a "$_anchor" '. + {brains_anchor:$a}' > "$stash" 2>/dev/null \
+  || printf '%s' "$input" > "$stash"
 
 # Daemonize: double-fork + setsid so the worker gets its own session and
 # survives the host killing the hook's process group on teardown. macOS has no

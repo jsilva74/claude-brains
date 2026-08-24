@@ -13,7 +13,7 @@ brains_have_sqlite || exit 0
 [ -f "$BRAINS_DB" ] || exit 0
 
 cwd="$(brains_field '.cwd')"
-[ -z "$cwd" ] && cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
+cwd="$(brains_anchor_dir "$cwd")"
 prompt="$(brains_field '.prompt')"
 [ -z "$prompt" ] && exit 0
 

@@ -1,0 +1,3 @@
+# Model prompts: the indented JSON inside them is the shape the model copies,
+# and prettier rewrites it. Formatting these is a functional regression.
+scripts/*-prompt.md

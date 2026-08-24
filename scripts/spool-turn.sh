@@ -31,7 +31,7 @@ brains_read_input
 transcript="$(brains_field '.transcript_path')"
 cwd="$(brains_field '.cwd')"
 session_id="$(brains_field '.session_id')"
-[ -z "$cwd" ] && cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
+cwd="$(brains_anchor_dir "$cwd")"
 
 [ -z "$session_id" ] && exit 0
 [ -n "$transcript" ] && [ -r "$transcript" ] || exit 0

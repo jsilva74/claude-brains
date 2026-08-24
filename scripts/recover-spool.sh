@@ -61,7 +61,7 @@ for sid in $orphans; do
   meta="${BRAINS_SPOOL_DIR}/${sid}.meta"
   cwd=""
   [ -r "$meta" ] && cwd="$(head -n1 "$meta" 2>/dev/null)"
-  [ -z "$cwd" ] && cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
+  [ -z "$cwd" ] && cwd="$(brains_anchor_dir "${CLAUDE_PROJECT_DIR:-$PWD}")"
 
   if brains_has jq; then
     payload="$(jq -n --arg s "$sid" --arg c "$cwd" \

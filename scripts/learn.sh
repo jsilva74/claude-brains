@@ -17,6 +17,7 @@ DIGEST_CAP=22000   # chars
 
 proj="${1:-$PWD}"
 proj="$(cd "$proj" 2>/dev/null && pwd)" || { echo "learn: invalid path"; exit 1; }
+proj="$(brains_anchor_dir "$proj")"   # file under the project anchor, not a subdir
 
 brains_have_sqlite || { echo "learn: sqlite3 not found"; exit 1; }
 brains_has claude   || { echo "learn: claude CLI not found"; exit 1; }

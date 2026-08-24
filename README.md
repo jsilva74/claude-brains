@@ -3,7 +3,7 @@
 Lightweight persistent memory for [Claude Code](https://claude.com/claude-code).
 
 It compresses each session into a local **SQLite + FTS5** store and recalls the
-relevant bits automatically in future sessions — the *core* of session memory
+relevant bits automatically in future sessions — the _core_ of session memory
 (compression + recall) **without** a background daemon, server, auth layer, job
 queue, or per-tool observer.
 
@@ -16,12 +16,12 @@ queue, or per-tool observer.
   spool into:
   - a short **summary** (a resumable handoff note), and
   - 0–8 durable **memories** (`decision` / `fact` / `preference` / `gotcha` / `state`).
-  On success the session's spool is deleted. A session too small to be worth a
-  model call (a finished spool under the trivial-size threshold) is also deleted
-  without distilling — that's a terminal state, not a retryable failure, so it
-  isn't re-dispatched on every future `SessionStart`. If the distill loses the
-  teardown race, the spool stays on disk and the next `SessionStart` recovers it
-  — so a session is never lost, only condensed slightly later.
+    On success the session's spool is deleted. A session too small to be worth a
+    model call (a finished spool under the trivial-size threshold) is also deleted
+    without distilling — that's a terminal state, not a retryable failure, so it
+    isn't re-dispatched on every future `SessionStart`. If the distill loses the
+    teardown race, the spool stays on disk and the next `SessionStart` recovers it
+    — so a session is never lost, only condensed slightly later.
 - **Recall** — on `SessionStart`, the last summary + top memories for the project
   are injected. On every `UserPromptSubmit`, an FTS5 match surfaces the memories
   relevant to what you just asked.
@@ -53,12 +53,23 @@ summaries(id, project_id, session_id, summary, created_at)            + summarie
 `slug` mirrors Claude Code's project-dir convention (every `/` → `-`), mapping
 1:1 to project paths.
 
+Project identity comes from the session's **anchor**, not from the hook payload's
+`cwd`. The Bash tool keeps its working directory between calls, so an agent that
+runs `cd backend` mid-session moves `cwd` — and hooks firing afterwards would
+credit the memory to a subdirectory, splitting one project into many. The anchor
+is `CLAUDE_PROJECT_DIR`, falling back to the highest ancestor holding `CLAUDE.md`
+or `.claude/`.
+
+Databases written before v1.4.0 carry that split. `scripts/migrate-merge-projects.sh`
+reports the merge plan (dry-run) and applies it with `--apply`, backing the
+database up first and archiving — never deleting — on a title clash.
+
 ## Platform support
 
-| OS | Status |
-| :--- | :--- |
-| macOS | ✅ native |
-| Linux | ✅ native |
+| OS      | Status                                                          |
+| :------ | :-------------------------------------------------------------- |
+| macOS   | ✅ native                                                       |
+| Linux   | ✅ native                                                       |
 | Windows | ✅ via **WSL** or **Git Bash** (a POSIX `bash` must be on PATH) |
 
 The hooks are POSIX shell scripts, so Windows needs a bash environment (WSL or
@@ -100,7 +111,7 @@ injects a one-line nudge. Apply it with the native plugin manager:
 ```
 
 > Marketplace plugins live in a Claude-Code-managed cache, so the plugin does not
-> overwrite its own files — the *check* is automatic, the *apply* is one command.
+> overwrite its own files — the _check_ is automatic, the _apply_ is one command.
 
 ## Manage — `/brains`
 
@@ -128,7 +139,13 @@ injects a one-line nudge. Apply it with the native plugin manager:
   memories kept per project, default 5), `BRAINS_GC_THRESHOLD` (active-memory
   count that arms the auto-GC, default 120), `BRAINS_GC_MIN_DISTILLS` /
   `BRAINS_GC_MAX_DISTILLS` (GC rate limits, defaults 5 / 25), `BRAINS_GC_SLICE`
-  (memories per GC pass, default 80).
+  (oldest memories per GC pass, default 80), `BRAINS_GC_MAX_BATCHES`
+  (batches in one decision-driven sweep, default 4).
+- Recall tuning: `BRAINS_RECALL_RECENT` / `BRAINS_RECALL_RELEVANT` (memories
+  injected at session start — newest N plus M matched by relevance, defaults
+  10 / 15), `BRAINS_RECONCILE_WINDOW` (memories shown to the distiller as
+  archival candidates, default 150; anything outside it can never be marked
+  obsolete).
 
 ## Uninstall
 

@@ -27,10 +27,15 @@ Rules:
 - `title` is an IDENTITY, not a description: NEVER embed a version, date, or status
   in it (`plugin_v1.2.1_live` is wrong; use `plugin_release_status` and put the
   version in `body`). Otherwise every update creates a contradictory duplicate.
-- `obsolete`: 0 to 8 titles copied EXACTLY from the "Existing memories" list that
-  this session proved outdated — work recorded as in-progress that is now done,
-  a decision that was reversed, a fact that was replaced. They will be archived.
-  Be conservative: only list a title when the transcript shows explicit evidence;
-  when in doubt, leave it out. If none, return "obsolete": [].
+- `obsolete`: 0 to 25 titles copied EXACTLY from the "Existing memories" list that
+  this session made outdated — work recorded as in-progress that is now done, a
+  decision that was reversed, a fact that was replaced. They will be archived.
+- RECENCY WINS: a decision made in THIS session invalidates every earlier memory
+  that argues the opposite on the same subject. List all of them in `obsolete` —
+  including memories that merely DEPEND on the position being abandoned
+  (consequences, constraints, plans that only hold under it). A memory does not
+  survive by still being factually accurate in isolation; if the direction it
+  argues was dropped, it is obsolete. The only guard is subject: leave it out
+  when the older memory is about a different subject, layer, or scope.
 - If nothing durable happened, return {"summary": "...", "memories": []}.
 - Never invent. Only record what the transcript actually shows.

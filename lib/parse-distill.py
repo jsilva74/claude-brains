@@ -54,7 +54,7 @@ def main() -> int:
     # Unwrap the `claude -p` envelope, then tolerantly extract the first {...}.
     raw = unwrap_envelope(raw)
 
-    match = re.search(r"\{.*\}", raw, re.S)
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
     if not match:
         return 0
     try:
@@ -97,7 +97,7 @@ def main() -> int:
 
     obsolete = data.get("obsolete")
     if isinstance(obsolete, list):
-        for title in obsolete[:8]:
+        for title in obsolete[:25]:  # a reversal can invalidate a whole cluster
             if not isinstance(title, str):
                 continue
             title = title.strip()[:200]

@@ -45,7 +45,7 @@ def main() -> int:
 
     raw = unwrap_envelope(raw)
 
-    match = re.search(r"\{.*\}", raw, re.S)
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
     if not match:
         return 0
     try:
@@ -81,12 +81,25 @@ def main() -> int:
                 continue
             mtype = (mem.get("type") or "").strip().lower()
             type_sql = f", type='{esc(mtype)}'" if mtype in VALID_TYPES else ""
+            # A title that names an abandoned scenario keeps lying even when the
+            # body is corrected, so the GC may rename it. Titles are the dedup
+            # key (UNIQUE project_id+title): the WHERE guard skips the rename
+            # when the new title is already taken, leaving the body update to
+            # apply on its own rather than aborting the whole batch.
+            new_title = (mem.get("new_title") or "").strip()[:200]
+            title_sql = ""
+            if new_title and new_title != title:
+                title_sql = f", title='{esc(new_title)}'"
+                out.append(
+                    f"UPDATE memories SET body='{esc(body)}'{type_sql}{title_sql}, updated_at=datetime('now') "
+                    f"WHERE project_id={pid_int} AND title='{esc(title)}' AND archived_at IS NULL "
+                    f"AND NOT EXISTS (SELECT 1 FROM memories x WHERE x.project_id={pid_int} "
+                    f"AND x.title='{esc(new_title)}');"
+                )
             out.append(
                 f"UPDATE memories SET body='{esc(body)}'{type_sql}, updated_at=datetime('now') "
                 f"WHERE project_id={pid_int} AND title='{esc(title)}' AND archived_at IS NULL;"
             )
-
-    if out:
         print("\n".join(out))
     else:
         # Valid reply, empty plan. Emit a no-op so the caller can tell "clean
