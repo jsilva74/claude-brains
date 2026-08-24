@@ -65,9 +65,18 @@ def main() -> int:
             title = title.strip()[:200]
             if not title:
                 continue
+            # The GC may only retire POSITIONS. Twice a consolidation pass wiped
+            # blocks of verifiable knowledge — exact commands, an override table,
+            # an arch-dependent trap — because they sat next to work that had
+            # concluded. The prompt already forbids it and the model did it
+            # anyway, so the rule lives here instead: a `fact`, `gotcha` or
+            # `preference` is never archived by consolidation. It can still be
+            # rewritten or merged through `update`, which loses nothing. The
+            # cost is a surviving duplicate; the alternative is a silent hole.
             out.append(
                 "UPDATE memories SET archived_at=datetime('now') "
-                f"WHERE project_id={pid_int} AND title='{esc(title)}' AND archived_at IS NULL;"
+                f"WHERE project_id={pid_int} AND title='{esc(title)}' AND archived_at IS NULL "
+                "AND type IN ('decision','state');"
             )
 
     updates = data.get("update")
@@ -100,6 +109,8 @@ def main() -> int:
                 f"UPDATE memories SET body='{esc(body)}'{type_sql}, updated_at=datetime('now') "
                 f"WHERE project_id={pid_int} AND title='{esc(title)}' AND archived_at IS NULL;"
             )
+
+    if out:
         print("\n".join(out))
     else:
         # Valid reply, empty plan. Emit a no-op so the caller can tell "clean
