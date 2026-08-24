@@ -111,10 +111,10 @@ brains_ensure_db() {
   brains_have_sqlite || return 1
   mkdir -p "$BRAINS_DIR" "$BRAINS_STATE_DIR" 2>/dev/null || true
   if [ ! -f "$BRAINS_DB" ]; then
-    brains_schema_sql | "$BRAINS_SQLITE" "$BRAINS_DB" >/dev/null 2>&1 || return 1
+    brains_schema_sql | brains_sql_stdin >/dev/null || return 1
   else
     # Cheap re-apply of CREATE IF NOT EXISTS keeps schema current across updates.
-    brains_schema_sql | "$BRAINS_SQLITE" "$BRAINS_DB" >/dev/null 2>&1 || true
+    brains_schema_sql | brains_sql_stdin >/dev/null || true
   fi
   brains_migrate_db
   return 0
@@ -133,9 +133,20 @@ brains_migrate_db() {
   return 0
 }
 
-# Run a SQL statement, discard errors. Usage: brains_sql "SELECT ..."
-brains_sql() { "$BRAINS_SQLITE" "$BRAINS_DB" "$1" 2>/dev/null; }
+# Every connection waits instead of failing on a concurrent writer. WAL allows
+# many readers with one writer, and SQLITE_BUSY is returned immediately unless a
+# timeout is set — the pragma is per-connection, so it cannot live in the schema
+# next to journal_mode. Two workers do collide now that a recorded decision
+# fires its own GC sweep on top of the distill: without this, the loser drops
+# its write and the memory only lands on the next session's retry.
+BRAINS_BUSY_MS="${BRAINS_BUSY_MS:-5000}"
+case "$BRAINS_BUSY_MS" in ''|*[!0-9]*) BRAINS_BUSY_MS=5000 ;; esac
 
+# Run a SQL statement, discard errors. Usage: brains_sql "SELECT ..."
+brains_sql() { "$BRAINS_SQLITE" -cmd ".timeout ${BRAINS_BUSY_MS}" "$BRAINS_DB" "$1" 2>/dev/null; }
+
+# Same, reading the script from stdin; the caller keeps sqlite's exit status.
+brains_sql_stdin() { "$BRAINS_SQLITE" -cmd ".timeout ${BRAINS_BUSY_MS}" "$BRAINS_DB" 2>/dev/null; }
 # Resolve the durable project anchor for a session.
 #
 # The payload `.cwd` is NOT stable: the Bash tool keeps its working directory

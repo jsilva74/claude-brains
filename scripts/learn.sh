@@ -105,7 +105,7 @@ if [ -z "$result" ]; then echo "learn: model returned nothing (rate limit? empty
 
 before="$(brains_sql "SELECT COUNT(*) FROM memories WHERE project_id=${pid};")"
 printf '%s' "$result" > "${digest}.r"
-python3 "$PARSE" "${digest}.r" "$pid" "learn-codebase" 2>/dev/null | "$BRAINS_SQLITE" "$BRAINS_DB" 2>/dev/null
+python3 "$PARSE" "${digest}.r" "$pid" "learn-codebase" 2>/dev/null | brains_sql_stdin
 rm -f "${digest}.r"
 after="$(brains_sql "SELECT COUNT(*) FROM memories WHERE project_id=${pid};")"
 

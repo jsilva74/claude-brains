@@ -156,7 +156,7 @@ if [ "${1:-}" = "--worker" ]; then
   python3 "${SCRIPT_DIR}/../lib/parse-distill.py" "$tmp_out" "$project_id" "$session_id" 2>/dev/null > "$tmp_sql"
 
   if [ -s "$tmp_sql" ]; then
-    if "$BRAINS_SQLITE" "$BRAINS_DB" < "$tmp_sql" 2>/dev/null; then
+    if brains_sql_stdin < "$tmp_sql"; then
       # Success: drop this session's spool (turn files + meta).
       if [ "$have_spool" = 1 ]; then
         rm -f -- "${BRAINS_SPOOL_DIR}/${sid}__"*.txt "$meta" 2>/dev/null || true

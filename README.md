@@ -135,6 +135,9 @@ injects a one-line nudge. Apply it with the native plugin manager:
 - `CLAUDE_CONFIG_DIR` — overrides the base dir (default `~/.claude`); the DB lives
   under `<config-dir>/brains/`.
 - Capture model — set in `scripts/distill.sh` (a fast, cheap model by default).
+- `BRAINS_BUSY_MS` — how long a connection waits for a concurrent writer before
+  giving up (default 5000ms). Set per connection, since the pragma cannot live
+  in the schema; without it a losing writer drops its work until the next retry.
 - Maintenance tuning (env vars, all optional): `BRAINS_STATE_KEEP` (active `state`
   memories kept per project, default 5), `BRAINS_GC_THRESHOLD` (active-memory
   count that arms the auto-GC, default 120), `BRAINS_GC_MIN_DISTILLS` /

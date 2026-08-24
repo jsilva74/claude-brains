@@ -106,7 +106,7 @@ reconcile_batch() {
   # parse failed -> caller leaves bookkeeping alone so the next gate retries.
   python3 "${SCRIPT_DIR}/../lib/parse-gc.py" "$tmp_out" "$project_id" 2>/dev/null > "$tmp_sql"
   [ -s "$tmp_sql" ] || return 1
-  "$BRAINS_SQLITE" "$BRAINS_DB" < "$tmp_sql" 2>/dev/null || return 1
+  brains_sql_stdin < "$tmp_sql" || return 1
   return 0
 }
 
