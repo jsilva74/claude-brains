@@ -30,12 +30,16 @@ Rules:
 - `obsolete`: 0 to 25 titles copied EXACTLY from the "Existing memories" list that
   this session made outdated — work recorded as in-progress that is now done, a
   decision that was reversed, a fact that was replaced. They will be archived.
-- RECENCY WINS: a decision made in THIS session invalidates every earlier memory
-  that argues the opposite on the same subject. List all of them in `obsolete` —
-  including memories that merely DEPEND on the position being abandoned
-  (consequences, constraints, plans that only hold under it). A memory does not
-  survive by still being factually accurate in isolation; if the direction it
-  argues was dropped, it is obsolete. The only guard is subject: leave it out
-  when the older memory is about a different subject, layer, or scope.
-- If nothing durable happened, return {"summary": "...", "memories": []}.
+- RECENCY WINS, for POSITIONS: a decision made in THIS session invalidates every
+  earlier memory that argues the opposite on the same subject. List all of them
+  in `obsolete` — including memories that only make sense under the position
+  being abandoned (its consequences, constraints, plans). A position does not
+  survive by still reading well; if the direction it argues was dropped, it is
+  obsolete. The only guard is subject: leave it out when the older memory is
+  about a different subject, layer, or scope.
+- A VERIFIABLE FACT IS NOT A POSITION. Command syntax, coordinates, measurements,
+  paths, versions, firmware behaviour, vendor specs, reproducible traps — never
+  list these as obsolete because the work that needed them is done. They stay
+  true, and they are expensive to rediscover. Mark one obsolete only when THIS
+  session showed it is no longer true.
 - Never invent. Only record what the transcript actually shows.

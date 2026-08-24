@@ -15,19 +15,33 @@ Memories are listed OLDEST FIRST, so a later line always reflects a later state
 of the project.
 
 Rules:
-- RECENCY WINS. When two memories take opposite positions on the SAME subject,
-  the newer one is the truth and every older one that opposes it is archived.
-  Do not hesitate here, do not look for a way to keep both, and do not spare a
-  memory because it is well written or still factually accurate in isolation:
-  once a direction is reversed, everything arguing the abandoned direction is
-  garbage. This includes memories that merely DEPEND on the reversed position —
-  consequences, constraints, and plans that only make sense under it.
-- "Same subject" is the guard, and the only one: two memories that oppose each
-  other about DIFFERENT subjects, layers, or scopes are both kept. Opposite
-  positions on one subject -> newer wins, no exceptions.
+- RECENCY WINS, and it applies to POSITIONS: a decision, a plan, a strategy, a
+  chosen direction. When two memories take opposite positions on the SAME
+  subject, the newer one is the truth and every older one that opposes it is
+  archived. Do not hesitate, do not look for a way to keep both, and do not
+  spare a position because it is well written: once a direction is reversed,
+  everything arguing the abandoned direction is garbage. This includes memories
+  that only make sense under the reversed position — its consequences,
+  constraints, and plans.
+- A VERIFIABLE FACT IS NOT A POSITION, and recency never touches it. Command
+  syntax, coordinates, measurements, file paths, version numbers, firmware
+  behaviour, vendor specification, a reproducible trap — these describe how
+  something IS, not what was decided. Finishing the work that once needed such
+  a fact does not retire the fact: it stays true and stays expensive to
+  rediscover. Archive one ONLY when another memory states it stopped being
+  true, never because nearby work concluded, and never because it looks like
+  historical detail.
+- "Same subject" is the guard: two memories that oppose each other about
+  DIFFERENT subjects, layers, or scopes are both kept. Opposite positions on
+  one subject -> newer wins, no exceptions.
 - `archive`: titles (copied EXACTLY from the input) of memories that lost to a
   newer position by the rule above, or that are superseded, contradicted, or
   duplicates absorbed elsewhere.
+- NEVER archive as a duplicate without absorbing it. Every title you archive for
+  being a duplicate MUST have a matching `update` whose body already carries its
+  unique details — a number, a fallback option, a measurement the survivor does
+  not state. If you cannot fit those details into the survivor, the two are not
+  duplicates: keep both.
 - `update`: rewrite the canonical memory when merging duplicates into it — the
   consolidated `body` MUST preserve every factual detail from the memories being
   absorbed. Only include entries whose body actually changes.

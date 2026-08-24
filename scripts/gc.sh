@@ -42,17 +42,20 @@ case "$slice_max" in ''|*[!0-9]*) slice_max=80 ;; esac
 max_batches="${BRAINS_GC_MAX_BATCHES:-4}"
 case "$max_batches" in ''|*[!0-9]*) max_batches=4 ;; esac
 
-# --- Lock: one GC at a time (machine-wide) -------------------------------
+# --- Lock: one GC per PROJECT --------------------------------------------
+# Scoped to the project, not the machine: two projects touch disjoint rows, and
+# SQLite (WAL + busy_timeout) already serialises the writes that do overlap.
+# A machine-wide lock only forced unrelated projects to queue behind each other.
 # mkdir is atomic on every POSIX filesystem. A lock left behind by a killed
 # worker is stolen once its mtime is older than 10 minutes.
 mkdir -p "$BRAINS_STATE_DIR" 2>/dev/null || true
-lock="${BRAINS_STATE_DIR}/gc.lock"
+lock="${BRAINS_STATE_DIR}/gc-${project_id}.lock"
 if ! mkdir "$lock" 2>/dev/null; then
   if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +10 2>/dev/null)" ]; then
     rm -rf -- "$lock" 2>/dev/null || true
     mkdir "$lock" 2>/dev/null || exit 0
   else
-    exit 0   # another GC is running
+    exit 0   # another GC is running for this project
   fi
 fi
 

@@ -37,6 +37,13 @@ queue, or per-tool observer.
     most once per 5 distills), an automatic **GC** pass consolidates duplicates
     and archives superseded entries — one bounded `claude -p` call in the same
     detached worker;
+  - after every distill a rotating batch of the least recently checked
+    `fact`/`gotcha` memories is matched against the live tree, catching the drift
+    reconciliation cannot see: code changed *outside* a session (a manual edit, a
+    `git pull`, a rename) leaves memories citing paths that no longer exist. A
+    batch whose paths all resolve costs no model call at all; only a vanished
+    path buys one, and the verdict prefers correcting the path to discarding the
+    knowledge;
   - nothing a model decides is ever deleted: archiving is a soft-delete,
     recoverable via `/brains restore` for 30 days before the physical purge.
 
@@ -46,7 +53,7 @@ Everything lives in one file: `~/.claude/brains/brains.db` (WAL mode).
 
 ```
 projects(id, slug, path, created_at)
-memories(id, project_id, type, title, body, created_at, updated_at, archived_at)   + memories_fts
+memories(id, project_id, type, title, body, created_at, updated_at, archived_at, verified_at)  + memories_fts
 summaries(id, project_id, session_id, summary, created_at)            + summaries_fts
 ```
 
@@ -147,7 +154,10 @@ injects a one-line nudge. Apply it with the native plugin manager:
   count that arms the auto-GC, default 120), `BRAINS_GC_MIN_DISTILLS` /
   `BRAINS_GC_MAX_DISTILLS` (GC rate limits, defaults 5 / 25), `BRAINS_GC_SLICE`
   (oldest memories per GC pass, default 80), `BRAINS_GC_MAX_BATCHES`
-  (batches in one decision-driven sweep, default 4).
+  (batches in one decision-driven sweep, default 4), `BRAINS_VERIFY_BATCH`
+  (memories checked against the tree per distill, default 15; `0` disables the
+  check), `BRAINS_VERIFY_COOLDOWN_DAYS` (days before a memory that matched is
+  re-checked, default 14).
 - Recall tuning: `BRAINS_RECALL_RECENT` / `BRAINS_RECALL_RELEVANT` (memories
   injected at session start — newest N plus M matched by relevance, defaults
   10 / 15), `BRAINS_RECONCILE_WINDOW` (memories shown to the distiller as

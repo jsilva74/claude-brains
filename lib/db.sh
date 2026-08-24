@@ -130,6 +130,12 @@ brains_migrate_db() {
   if [ "${has_col:-0}" = "0" ]; then
     brains_sql "ALTER TABLE memories ADD COLUMN archived_at TEXT;"
   fi
+  # v1.6.0: last time this memory was checked against the live repo. NULL means
+  # never verified, which doubles as the queue order (oldest check goes first).
+  has_col="$(brains_sql "SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name='verified_at';")"
+  if [ "${has_col:-0}" = "0" ]; then
+    brains_sql "ALTER TABLE memories ADD COLUMN verified_at TEXT;"
+  fi
   return 0
 }
 
