@@ -255,7 +255,7 @@ BRAINS_TURNS_FILTER='
 # == line number — the basis for the spool high-water mark. Decode a line with
 # `jq -r .`. Requires jq.
 brains_turns_ndjson() {
-  tail -n 800 "$1" 2>/dev/null | jq -r "${BRAINS_TURNS_FILTER} | @json" 2>/dev/null
+  jq -r "input_line_number as \$ln | ${BRAINS_TURNS_FILTER} | \"\\(\$ln)\\t\" + @json" "$1" 2>/dev/null
 }
 
 # Emit the plain "[role] text" turns (legacy distill input) from a transcript.

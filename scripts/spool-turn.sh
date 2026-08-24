@@ -8,8 +8,12 @@
 # the spool as its single source.
 #
 # Layout (flat, session-prefixed):
-#   <spool>/<sid>__00001.txt   raw "[role] text" chunk for turn index 1
-#   <spool>/<sid>.meta         one line: session cwd (project resolution)
+#   <spool>/<sid>__0000042.txt  raw "[role] text" chunk for transcript line 42
+#   <spool>/<sid>.meta          one line: session cwd (project resolution)
+#   <spool>/<sid>.mark          one line: "v2 <line>" high-water mark
+#
+# Turns are indexed by their line number in the transcript, which is append-only
+# and therefore stable: a given turn keeps the same index for the whole session.
 #
 # Never blocks: any failure exits 0.
 set -uo pipefail
@@ -39,34 +43,39 @@ cwd="$(brains_anchor_dir "$cwd")"
 mkdir -p "$BRAINS_SPOOL_DIR" 2>/dev/null || exit 0
 sid="$(brains_sid "$session_id")"
 meta="${BRAINS_SPOOL_DIR}/${sid}.meta"
-
-# --- High-water mark: highest turn index already spooled for this session ---
-# Two sources, and the mark file is the one that matters. Spooled turns are
-# deleted once distilled, so on a session that hit /compact the files are gone
-# while the transcript keeps growing: reading the mark from the files alone
-# restarts at turn 1 and re-spools the whole conversation for the next distill
-# to compress a second time. The mark file outlives that cleanup.
 mark_file="${BRAINS_SPOOL_DIR}/${sid}.mark"
+
+# --- High-water mark: highest transcript line already spooled ---------------
+# The mark file is authoritative and carries a schema tag. A pre-v2 mark counted
+# turns within a sliding window, an index that cannot be mapped onto line
+# numbers, so its spool is discarded and rebuilt from the transcript: rebuilding
+# costs a re-read, keeping it would mean silent duplicates and gaps.
 mark=0
 if [ -r "$mark_file" ]; then
-  mark="$(head -n1 "$mark_file" 2>/dev/null)"
-  case "$mark" in ''|*[!0-9]*) mark=0 ;; esac
+  read -r tag val < "$mark_file" 2>/dev/null || { tag=""; val=""; }
+  if [ "$tag" = "v2" ]; then
+    case "$val" in ''|*[!0-9]*) mark=0 ;; *) mark="$val" ;; esac
+  else
+    rm -f -- "${BRAINS_SPOOL_DIR}/${sid}__"*.txt "$mark_file" 2>/dev/null
+    mark=0
+  fi
 fi
-for f in "${BRAINS_SPOOL_DIR}/${sid}__"*.txt; do
-  [ -e "$f" ] || continue
-  n="${f##*__}"; n="${n%.txt}"
-  n=$((10#$n)) 2>/dev/null || n=0
-  [ "$n" -gt "$mark" ] && mark="$n"
-done
+# Fallback when the mark file is missing: recover it from the spooled files.
+# Safe now that the index is the (stable) transcript line number.
+if [ "$mark" -eq 0 ]; then
+  for f in "${BRAINS_SPOOL_DIR}/${sid}__"*.txt; do
+    [ -e "$f" ] || continue
+    n="${f##*__}"; n="${n%.txt}"
+    n=$((10#$n)) 2>/dev/null || n=0
+    [ "$n" -gt "$mark" ] && mark="$n"
+  done
+fi
 
-# --- Parse all turns to NDJSON; turn index == line number -------------------
+# --- Parse all turns to "<line>\t<json>" ------------------------------------
 tmp_nd="$(mktemp "${TMPDIR:-/tmp}/brains_nd.XXXXXX")" || exit 0
 trap 'rm -f -- "$tmp_nd"' EXIT
 brains_turns_ndjson "$transcript" > "$tmp_nd" 2>/dev/null
-total="$(wc -l < "$tmp_nd" 2>/dev/null || echo 0)"; total=$((total + 0))
-
-# Nothing new since the last spool.
-[ "$total" -le "$mark" ] && exit 0
+[ -s "$tmp_nd" ] || exit 0
 
 # --- Record session cwd once (atomic) --------------------------------------
 if [ ! -f "$meta" ]; then
@@ -77,26 +86,28 @@ if [ ! -f "$meta" ]; then
 fi
 
 # --- Spool new turns: write .partial then atomic rename --------------------
-i="$mark"
-while [ "$i" -lt "$total" ]; do
-  i=$((i + 1))
-  idx="$(printf '%05d' "$i")"
+high="$mark"
+while IFS=$'\t' read -r ln payload; do
+  case "$ln" in ''|*[!0-9]*) continue ;; esac
+  [ "$ln" -le "$mark" ] && continue
+  idx="$(printf '%07d' "$ln")"
   fin="${BRAINS_SPOOL_DIR}/${sid}__${idx}.txt"
+  [ "$ln" -gt "$high" ] && high="$ln"
   [ -e "$fin" ] && continue   # self-heal idempotency: never rewrite a turn
-  line="$(sed -n "${i}p" "$tmp_nd")"
-  [ -z "$line" ] && continue
+  [ -z "$payload" ] && continue
   part="${BRAINS_SPOOL_DIR}/.${sid}__${idx}.partial"
-  if { printf '%s' "$line" | jq -r . 2>/dev/null; printf '\n'; } > "$part" 2>/dev/null; then
+  if { printf '%s' "$payload" | jq -r . 2>/dev/null; printf '\n'; } > "$part" 2>/dev/null; then
     mv -f "$part" "$fin" 2>/dev/null || rm -f -- "$part"
   else
     rm -f -- "$part"
   fi
-done
+done < "$tmp_nd"
 
 # Persist how far this session has been spooled. Written last, so a crash
 # mid-loop leaves the mark behind rather than ahead: the next Stop re-spools a
 # few turns that already exist, which the `[ -e "$fin" ]` guard makes free.
-printf '%s\n' "$total" > "${mark_file}.partial" 2>/dev/null \
+[ "$high" -le "$mark" ] && exit 0
+printf 'v2 %s\n' "$high" > "${mark_file}.partial" 2>/dev/null \
   && mv -f "${mark_file}.partial" "$mark_file" 2>/dev/null \
   || rm -f -- "${mark_file}.partial"
 
