@@ -211,19 +211,24 @@ brains_fts_query() {
 # --- Hook JSON output ----------------------------------------------------
 # Emit a SessionStart/UserPromptSubmit additionalContext payload.
 # Args: <hookEventName> <context-text>. Uses jq when available for safe JSON.
+# Emit a hook payload. $3 is an optional warning for the USER's screen.
+#
+# additionalContext reaches the model only — a warning nobody prints is a
+# warning nobody sees. systemMessage is what surfaces on screen, so a warning
+# goes out on both channels: the user is told, and the assistant knows why.
 brains_emit_context() {
-  local event="$1" text="$2"
-  [ -z "$text" ] && return 0
+  local event="$1" text="$2" warn="${3:-}"
+  [ -z "$text" ] && [ -z "$warn" ] && return 0
   if brains_has jq; then
-    jq -n --arg e "$event" --arg c "$text" \
-      '{hookSpecificOutput: {hookEventName: $e, additionalContext: $c}}'
+    jq -n --arg e "$event" --arg c "$text" --arg w "$warn" \
+      '{hookSpecificOutput: {hookEventName: $e, additionalContext: $c}}
+       + (if $w == "" then {} else {systemMessage: $w} end)'
   else
     # Minimal manual JSON escaping fallback.
     local esc="${text//\\/\\\\}"; esc="${esc//\"/\\\"}"; esc="${esc//$'\n'/\\n}"; esc="${esc//$'\t'/\\t}"
     printf '{"hookSpecificOutput":{"hookEventName":"%s","additionalContext":"%s"}}' "$event" "$esc"
   fi
 }
-
 # --- Transcript turn extraction ------------------------------------------
 # Shared jq program: keep only user/assistant turns that carry text, and render
 # each as a single "[role] text" string. Used by both the spool writer (Stop)

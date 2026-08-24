@@ -60,6 +60,10 @@ credit the memory to a subdirectory, splitting one project into many. The anchor
 is `CLAUDE_PROJECT_DIR`, falling back to the highest ancestor holding `CLAUDE.md`
 or `.claude/`.
 
+A project root carrying neither marker has no stable fallback, so SessionStart
+says so on screen (`systemMessage`, not just model context) rather than writing a
+file into the repo uninvited. Scratch directories are exempt.
+
 Databases written before v1.4.0 carry that split. `scripts/migrate-merge-projects.sh`
 reports the merge plan (dry-run) and applies it with `--apply`, backing the
 database up first and archiving — never deleting — on a title clash.
