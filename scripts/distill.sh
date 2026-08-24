@@ -177,6 +177,16 @@ if [ "${1:-}" = "--worker" ]; then
                          WHERE project_id=${project_id} AND type='state' AND archived_at IS NULL
                          ORDER BY updated_at DESC LIMIT ${state_keep});"
 
+      # --- Repo drift check ----------------------------------------------
+      # Reconciliation only sees what a session says. Code changed outside one
+      # (manual edit, git pull, rename) silently leaves memories pointing at
+      # paths that no longer exist. A rotating batch is matched against the
+      # live tree every distill; a batch that still resolves costs no model
+      # call at all. It runs BEFORE both GC passes on purpose: those spend
+      # minutes on model calls, and a worker that ends in the middle of them
+      # would leave the session's own new facts unchecked until next time.
+      bash "${SCRIPT_DIR}/verify.sh" "$project_id" "$cwd" >/dev/null 2>&1 || true
+
       # --- Directed reconciliation ---------------------------------------
       # A new decision is the moment the rest of the corpus can become wrong,
       # so the decision itself drives the cleanup: everything it matches gets
@@ -204,14 +214,6 @@ if [ "${1:-}" = "--worker" ]; then
       if [ "$gc_count" -ge "$gc_min" ] && { [ "$active" -gt "$gc_thr" ] || [ "$gc_count" -ge "$gc_max" ]; }; then
         bash "${SCRIPT_DIR}/gc.sh" "$project_id" >/dev/null 2>&1 || true
       fi
-
-      # --- Repo drift check ----------------------------------------------
-      # Reconciliation only sees what a session says. Code changed outside one
-      # (manual edit, git pull, rename) silently leaves memories pointing at
-      # paths that no longer exist. A rotating batch is matched against the
-      # live tree every distill; a batch that still resolves costs no model
-      # call at all.
-      bash "${SCRIPT_DIR}/verify.sh" "$project_id" "$cwd" >/dev/null 2>&1 || true
     fi
   fi
   # Empty SQL (failed parse) -> leave spool intact for a later retry.

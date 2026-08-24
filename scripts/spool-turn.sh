@@ -41,7 +41,17 @@ sid="$(brains_sid "$session_id")"
 meta="${BRAINS_SPOOL_DIR}/${sid}.meta"
 
 # --- High-water mark: highest turn index already spooled for this session ---
+# Two sources, and the mark file is the one that matters. Spooled turns are
+# deleted once distilled, so on a session that hit /compact the files are gone
+# while the transcript keeps growing: reading the mark from the files alone
+# restarts at turn 1 and re-spools the whole conversation for the next distill
+# to compress a second time. The mark file outlives that cleanup.
+mark_file="${BRAINS_SPOOL_DIR}/${sid}.mark"
 mark=0
+if [ -r "$mark_file" ]; then
+  mark="$(head -n1 "$mark_file" 2>/dev/null)"
+  case "$mark" in ''|*[!0-9]*) mark=0 ;; esac
+fi
 for f in "${BRAINS_SPOOL_DIR}/${sid}__"*.txt; do
   [ -e "$f" ] || continue
   n="${f##*__}"; n="${n%.txt}"
@@ -82,5 +92,12 @@ while [ "$i" -lt "$total" ]; do
     rm -f -- "$part"
   fi
 done
+
+# Persist how far this session has been spooled. Written last, so a crash
+# mid-loop leaves the mark behind rather than ahead: the next Stop re-spools a
+# few turns that already exist, which the `[ -e "$fin" ]` guard makes free.
+printf '%s\n' "$total" > "${mark_file}.partial" 2>/dev/null \
+  && mv -f "${mark_file}.partial" "$mark_file" 2>/dev/null \
+  || rm -f -- "${mark_file}.partial"
 
 exit 0
