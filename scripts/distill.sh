@@ -53,13 +53,22 @@ if [ "${1:-}" = "--worker" ]; then
   fi
 
   # Project anchor, most trustworthy first:
-  #   1. brains_anchor  - stamped by the launcher while CLAUDE_PROJECT_DIR was
-  #                       still in the environment (setsid drops it).
-  #   2. the spooled .meta - the anchor recorded at the session's first turn.
+  #   1. the spooled .meta - written by the owning session at its own first
+  #                       turn, so it is the only source that does not depend
+  #                       on who runs the distill.
+  #   2. brains_anchor  - stamped by the launcher while CLAUDE_PROJECT_DIR was
+  #                       still in the environment (setsid drops it). Correct
+  #                       for a session distilling itself, and a lie under
+  #                       recovery: there the launcher runs inside the NEW
+  #                       session, and brains_anchor_dir() lets that session's
+  #                       CLAUDE_PROJECT_DIR override the cwd it is handed. It
+  #                       used to win over .meta and signed one project's work
+  #                       with another's name.
   #   3. payload .cwd    - last resort only; the agent may have `cd`-ed away
   #                        mid-session, which would credit another project.
-  anchor="$(brains_field '.brains_anchor')"
-  [ -z "$anchor" ] && [ -r "$meta" ] && anchor="$(head -n1 "$meta" 2>/dev/null)"
+  anchor=""
+  [ -r "$meta" ] && anchor="$(head -n1 "$meta" 2>/dev/null)"
+  [ -z "$anchor" ] && anchor="$(brains_field '.brains_anchor')"
   [ -z "$anchor" ] && anchor="$(brains_anchor_dir "${cwd:-${CLAUDE_PROJECT_DIR:-$PWD}}")"
   cwd="$anchor"
 
@@ -92,7 +101,11 @@ if [ "${1:-}" = "--worker" ]; then
   # SessionStart until the 7-day prune.
   if [ "$(wc -c < "$tmp_convo" 2>/dev/null || echo 0)" -lt 400 ]; then
     if [ "$have_spool" = 1 ]; then
-      rm -f -- "${BRAINS_SPOOL_DIR}/${sid}__"*.txt "$meta" 2>/dev/null || true
+      # `.meta` survives, like `.mark`: it is the session's own record of
+      # which project it belongs to, and a later recovery of this same
+      # session has no other honest way to know. The 7-day spool prune in
+      # recover-spool.sh clears it in the end.
+      rm -f -- "${BRAINS_SPOOL_DIR}/${sid}__"*.txt 2>/dev/null || true
     fi
     exit 0
   fi
@@ -159,7 +172,11 @@ if [ "${1:-}" = "--worker" ]; then
     if brains_sql_stdin < "$tmp_sql"; then
       # Success: drop this session's spool (turn files + meta).
       if [ "$have_spool" = 1 ]; then
-        rm -f -- "${BRAINS_SPOOL_DIR}/${sid}__"*.txt "$meta" 2>/dev/null || true
+        # `.meta` survives, like `.mark`: it is the session's own record of
+      # which project it belongs to, and a later recovery of this same
+      # session has no other honest way to know. The 7-day spool prune in
+      # recover-spool.sh clears it in the end.
+      rm -f -- "${BRAINS_SPOOL_DIR}/${sid}__"*.txt 2>/dev/null || true
       fi
 
       # --- Post-distill maintenance (pure SQL, microseconds) -------------
