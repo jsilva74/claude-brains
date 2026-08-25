@@ -72,7 +72,7 @@ brains_sql "SELECT id || char(9) || replace(replace(title, char(9), ' '), char(1
   WHERE project_id=${project_id} AND archived_at IS NULL
     AND type IN ('fact','gotcha')
     AND (verified_at IS NULL OR verified_at < datetime('now','-${cool} days'))
-  ORDER BY verified_at IS NOT NULL, verified_at ASC, updated_at ASC
+  ORDER BY verified_at IS NOT NULL, verified_at ASC, created_at ASC
   LIMIT ${batch};" > "$tmp_rows"
 [ -s "$tmp_rows" ] || exit 0
 

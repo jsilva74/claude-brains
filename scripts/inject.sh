@@ -49,7 +49,7 @@ relevant_n="${BRAINS_RECALL_RELEVANT:-15}"; case "$relevant_n" in ''|*[!0-9]*) r
 recent="$(brains_sql "
   SELECT id FROM memories
   WHERE project_id=${project_id} AND archived_at IS NULL
-  ORDER BY updated_at DESC LIMIT ${recent_n};
+  ORDER BY created_at DESC LIMIT ${recent_n};
 " | paste -sd, -)"
 [ -z "$recent" ] && recent="0"
 
@@ -73,7 +73,7 @@ memories="$(brains_sql "
   FROM memories
   WHERE project_id=${project_id} AND archived_at IS NULL
     AND id IN (${recent},${relevant})
-  ORDER BY updated_at DESC;
+  ORDER BY created_at DESC;
 ")"
 [ -z "$last_summary" ] && [ -z "$memories" ] && { [ -n "$warn" ] && brains_emit_context "SessionStart" "$warn" "$warn"; exit 0; }
 

@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS memories (
   body       TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
-  UNIQUE (project_id, title)
+  archived_at TEXT,
+  verified_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS summaries (
@@ -73,7 +74,12 @@ CREATE TABLE IF NOT EXISTS summaries (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id, created_at DESC);
+-- A restated memory archives its predecessor and inserts a new row, so the same
+-- title legitimately exists many times over a project's life. Only one of them
+-- may be active, which a table-level UNIQUE cannot express.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_title_active
+  ON memories(project_id, title) WHERE archived_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_summaries_project ON summaries(project_id, created_at DESC);
 
 -- Full-text search (external-content tables kept in sync via triggers).
@@ -135,6 +141,41 @@ brains_migrate_db() {
   has_col="$(brains_sql "SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name='verified_at';")"
   if [ "${has_col:-0}" = "0" ]; then
     brains_sql "ALTER TABLE memories ADD COLUMN verified_at TEXT;"
+  fi
+  # v1.7.0: the table-level UNIQUE(project_id,title) is what forced a restated
+  # memory to overwrite its predecessor in place, which reset the row's clock
+  # and made a dead claim outrank the decision that had already killed it. The
+  # constraint is rebuilt as a PARTIAL unique index so an archived row keeps its
+  # title while a new assertion takes the live slot. SQLite cannot drop a
+  # table-level constraint, so the table is rewritten once.
+  local has_partial
+  has_partial="$(brains_sql "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_memories_title_active';")"
+  if [ "${has_partial:-0}" = "0" ]; then
+    brains_sql "
+      PRAGMA foreign_keys=off;
+      BEGIN;
+      CREATE TABLE memories_v170 (
+        id         INTEGER PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        type       TEXT NOT NULL CHECK (type IN ('decision','fact','preference','gotcha','state')),
+        title      TEXT NOT NULL,
+        body       TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        archived_at TEXT,
+        verified_at TEXT
+      );
+      INSERT INTO memories_v170(id,project_id,type,title,body,created_at,updated_at,archived_at,verified_at)
+        SELECT id,project_id,type,title,body,created_at,updated_at,archived_at,verified_at FROM memories;
+      DROP TABLE memories;
+      ALTER TABLE memories_v170 RENAME TO memories;
+      CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id, created_at DESC);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_title_active
+        ON memories(project_id, title) WHERE archived_at IS NULL;
+      COMMIT;
+      PRAGMA foreign_keys=on;
+      INSERT INTO memories_fts(memories_fts) VALUES('rebuild');
+    "
   fi
   return 0
 }

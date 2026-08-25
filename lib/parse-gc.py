@@ -31,6 +31,10 @@ def main() -> int:
     if len(sys.argv) < 3:
         return 0
     text_path, pid = sys.argv[1], sys.argv[2]
+    # "directed": this sweep was triggered by a decision the session just
+    # recorded, so a contradiction it finds is real. Anything else is the
+    # rotating maintenance sweep, which has no such trigger.
+    directed = len(sys.argv) > 3 and sys.argv[3] == "directed"
 
     try:
         pid_int = int(pid)
@@ -59,24 +63,27 @@ def main() -> int:
 
     archive = data.get("archive")
     if isinstance(archive, list):
-        for title in archive[:80]:
+        for title in archive:
             if not isinstance(title, str):
                 continue
             title = title.strip()[:200]
             if not title:
                 continue
-            # The GC may only retire POSITIONS. Twice a consolidation pass wiped
-            # blocks of verifiable knowledge — exact commands, an override table,
-            # an arch-dependent trap — because they sat next to work that had
-            # concluded. The prompt already forbids it and the model did it
-            # anyway, so the rule lives here instead: a `fact`, `gotcha` or
-            # `preference` is never archived by consolidation. It can still be
-            # rewritten or merged through `update`, which loses nothing. The
-            # cost is a surviving duplicate; the alternative is a silent hole.
+            # The maintenance sweep may only retire POSITIONS. Twice it wiped
+            # blocks of verifiable knowledge — exact commands, an override
+            # table, an arch-dependent trap — because they sat next to work
+            # that had concluded. The prompt already forbade it and the model
+            # did it anyway, so the rule lives here: with no decision behind
+            # the sweep, a `fact`, `gotcha` or `preference` is never archived.
+            # A directed sweep is different — a decision the session recorded
+            # is driving it, and a claim it contradicts must die whatever its
+            # type. That was the hole: a dead `fact` outliving the decision
+            # that killed it, immune because of what it was labelled.
+            type_guard = "" if directed else " AND type IN ('decision','state')"
             out.append(
                 "UPDATE memories SET archived_at=datetime('now') "
-                f"WHERE project_id={pid_int} AND title='{esc(title)}' AND archived_at IS NULL "
-                "AND type IN ('decision','state');"
+                f"WHERE project_id={pid_int} AND title='{esc(title)}' AND archived_at IS NULL"
+                f"{type_guard};"
             )
 
     updates = data.get("update")

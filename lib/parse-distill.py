@@ -88,16 +88,24 @@ def main() -> int:
             # Bound runaway values.
             title = title[:200]
             body = body[:2000]
+            # A restated memory is a NEW assertion, not an edit of the old one.
+            # Overwriting in place kept the row and reset its clock, so a claim a
+            # decision had already killed came back as the newest thing in the
+            # project and outranked the decision itself. The predecessor is
+            # archived and the new assertion gets its own created_at, which is
+            # what every recency rule reads.
+            out.append(
+                "UPDATE memories SET archived_at=datetime('now') "
+                f"WHERE project_id={pid_int} AND title='{esc(title)}' AND archived_at IS NULL;"
+            )
             out.append(
                 "INSERT INTO memories(project_id, type, title, body) "
-                f"VALUES({pid_int}, '{esc(mtype)}', '{esc(title)}', '{esc(body)}') "
-                "ON CONFLICT(project_id, title) DO UPDATE SET "
-                "body=excluded.body, type=excluded.type, updated_at=datetime('now');"
+                f"VALUES({pid_int}, '{esc(mtype)}', '{esc(title)}', '{esc(body)}');"
             )
 
     obsolete = data.get("obsolete")
     if isinstance(obsolete, list):
-        for title in obsolete[:25]:  # a reversal can invalidate a whole cluster
+        for title in obsolete:  # a reversal can invalidate a whole cluster
             if not isinstance(title, str):
                 continue
             title = title.strip()[:200]

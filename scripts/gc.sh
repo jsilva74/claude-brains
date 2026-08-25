@@ -69,7 +69,7 @@ gc_sys='You are a strict JSON memory-store garbage collector for a coding assist
 # Reconcile one batch of memory ids. Echoes "ok" when the plan applied.
 # $1 = comma-separated ids, $2 = optional text describing what triggered this.
 reconcile_batch() {
-  local ids="$1" trigger="${2:-}"
+  local ids="$1" trigger="${2:-}" mode="${3:-sweep}"
   [ -z "$ids" ] && return 1
 
   # Newlines inside bodies are flattened so one line == one memory, which keeps
@@ -77,7 +77,7 @@ reconcile_batch() {
   brains_sql "
     SELECT '- [' || type || '] ' || title || ': ' || replace(replace(body, char(13), ' '), char(10), ' ')
     FROM memories WHERE id IN (${ids})
-    ORDER BY updated_at ASC;
+    ORDER BY created_at ASC;
   " | awk '{ n += length($0) + 1; if (n > 48000) exit; print }' > "$tmp_slice"
 
   [ "$(wc -l < "$tmp_slice" 2>/dev/null || echo 0)" -lt 2 ] && return 1
@@ -107,7 +107,7 @@ reconcile_batch() {
 
   # parse-gc emits only UPDATEs (never INSERT/DELETE). An empty file means the
   # parse failed -> caller leaves bookkeeping alone so the next gate retries.
-  python3 "${SCRIPT_DIR}/../lib/parse-gc.py" "$tmp_out" "$project_id" 2>/dev/null > "$tmp_sql"
+  python3 "${SCRIPT_DIR}/../lib/parse-gc.py" "$tmp_out" "$project_id" "$mode" 2>/dev/null > "$tmp_sql"
   [ -s "$tmp_sql" ] || return 1
   brains_sql_stdin < "$tmp_sql" || return 1
   return 0
@@ -120,8 +120,10 @@ if [ -n "$directed_seed" ]; then
   match="$(brains_fts_query "$directed_seed")"
   [ -z "$match" ] && exit 0
   ematch="$(brains_sql_escape "$match")"
+  # No batch ceiling here: the decision driving this sweep must reach every
+  # memory it contradicts, and the empty-slice break below already ends it.
   batch=0
-  while [ "$batch" -lt "$max_batches" ]; do
+  while :; do
     # Re-query each round: rows archived or retitled by the previous batch drop
     # out on their own, so the sweep converges instead of re-reading them.
     ids="$(brains_sql "
@@ -131,7 +133,7 @@ if [ -n "$directed_seed" ]; then
       ORDER BY rank LIMIT ${slice_max} OFFSET $((batch * slice_max));
     " | paste -sd, -)"
     [ -z "$ids" ] && break
-    reconcile_batch "$ids" "$directed_seed" && applied=1
+    reconcile_batch "$ids" "$directed_seed" directed && applied=1
     batch=$((batch + 1))
   done
 else
@@ -149,7 +151,7 @@ else
 
   seed="$(brains_sql "SELECT title || ' ' || body FROM memories
     WHERE project_id=${project_id} AND archived_at IS NULL
-    ORDER BY updated_at DESC LIMIT 1 OFFSET ${seed_off};")"
+    ORDER BY created_at DESC LIMIT 1 OFFSET ${seed_off};")"
 
   ids=""
   if [ -n "$seed" ]; then
@@ -167,7 +169,7 @@ else
   if [ -z "$ids" ]; then
     ids="$(brains_sql "SELECT id FROM memories
       WHERE project_id=${project_id} AND archived_at IS NULL
-      ORDER BY updated_at ASC LIMIT ${slice_max};" | paste -sd, -)"
+      ORDER BY created_at ASC LIMIT ${slice_max};" | paste -sd, -)"
   fi
   reconcile_batch "$ids" && applied=1
 

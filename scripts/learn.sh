@@ -83,7 +83,7 @@ if [ "$(wc -c <"$digest")" -gt "$DIGEST_CAP" ]; then
 fi
 
 # --- Distill (isolated cwd so headless claude -p never pollutes a project) -
-existing="$(brains_sql "SELECT '- '||type||': '||title FROM memories WHERE project_id=${pid} ORDER BY updated_at DESC LIMIT 60;")"
+existing="$(brains_sql "SELECT '- '||type||': '||title FROM memories WHERE project_id=${pid} ORDER BY created_at DESC LIMIT 60;")"
 work="$(mktemp -d "${TMPDIR:-/tmp}/brains-learn.XXXXXX")"
 {
   cat "$PROMPT"

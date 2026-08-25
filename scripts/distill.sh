@@ -103,7 +103,7 @@ if [ "${1:-}" = "--worker" ]; then
   # cutoff become immortal — invisible to every future reconciliation pass.
   rec_win="${BRAINS_RECONCILE_WINDOW:-150}"
   case "$rec_win" in ''|*[!0-9]*) rec_win=150 ;; esac
-  existing="$(brains_sql "SELECT '- ' || type || ': ' || title FROM memories WHERE project_id=${project_id} AND archived_at IS NULL ORDER BY updated_at DESC LIMIT ${rec_win};")"
+  existing="$(brains_sql "SELECT '- ' || type || ': ' || title FROM memories WHERE project_id=${project_id} AND archived_at IS NULL ORDER BY created_at DESC LIMIT ${rec_win};")"
 
   # --- Assemble prompt ---------------------------------------------------
   {
@@ -175,7 +175,7 @@ if [ "${1:-}" = "--worker" ]; then
         WHERE project_id=${project_id} AND type='state' AND archived_at IS NULL
           AND id NOT IN (SELECT id FROM memories
                          WHERE project_id=${project_id} AND type='state' AND archived_at IS NULL
-                         ORDER BY updated_at DESC LIMIT ${state_keep});"
+                         ORDER BY created_at DESC LIMIT ${state_keep});"
 
       # --- Repo drift check ----------------------------------------------
       # Reconciliation only sees what a session says. Code changed outside one
@@ -194,7 +194,7 @@ if [ "${1:-}" = "--worker" ]; then
       # seed to land on the same subject some passes later.
       decided="$(brains_sql "SELECT title || ' ' || body FROM memories
         WHERE project_id=${project_id} AND archived_at IS NULL AND type='decision'
-          AND updated_at >= datetime('now','-2 minutes');")"
+          AND created_at >= datetime('now','-2 minutes');")"
       if [ -n "$decided" ]; then
         bash "${SCRIPT_DIR}/gc.sh" "$project_id" --seed "$decided" >/dev/null 2>&1 || true
       fi

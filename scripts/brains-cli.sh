@@ -58,7 +58,7 @@ case "$cmd" in
   list)
     target="${1:-$cwd}"; pid="$(pid_for "$target")"
     [ -z "$pid" ] && { echo "(no memory for this project)"; exit 0; }
-    brains_sql "SELECT '[' || type || '] ' || title || ': ' || body FROM memories WHERE project_id=$pid AND archived_at IS NULL ORDER BY updated_at DESC;"
+    brains_sql "SELECT '[' || type || '] ' || title || ': ' || body FROM memories WHERE project_id=$pid AND archived_at IS NULL ORDER BY created_at DESC;"
     ;;
   forget)
     title="$*"; [ -z "$title" ] && { echo "usage: forget <exact title>"; exit 1; }
