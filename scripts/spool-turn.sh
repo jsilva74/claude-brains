@@ -78,11 +78,20 @@ brains_turns_ndjson "$transcript" > "$tmp_nd" 2>/dev/null
 [ -s "$tmp_nd" ] || exit 0
 
 # --- Record session cwd once (atomic) --------------------------------------
+# Written once and never rewritten: the project a session belongs to does not
+# change, and re-deriving it mid-session is exactly how a `cd` would hijack it.
 if [ ! -f "$meta" ]; then
   mpart="${BRAINS_SPOOL_DIR}/.${sid}.meta.partial"
   if printf '%s\n' "$cwd" > "$mpart" 2>/dev/null; then
     mv -f "$mpart" "$meta" 2>/dev/null || rm -f -- "$mpart"
   fi
+else
+  # Written once means its mtime freezes at the first turn, while `.mark` is
+  # rewritten every turn. The spool prune deletes by mtime, so a session living
+  # past the prune window would lose `.meta` with its turns still on disk — and
+  # project resolution would fall back to guessing again. Keep it as young as
+  # the spool it describes. Content is untouched.
+  touch "$meta" 2>/dev/null || true
 fi
 
 # --- Spool new turns: write .partial then atomic rename --------------------
