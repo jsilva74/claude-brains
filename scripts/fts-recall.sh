@@ -24,13 +24,28 @@ match="$(brains_fts_query "$prompt")"
 [ -z "$match" ] && exit 0
 ematch="$(brains_sql_escape "$match")"
 
-# Rank by FTS relevance; keep it tight so we don't bloat every prompt.
+# Rank by FTS relevance, weighted by type and recency; bm25 rank is negative,
+# so a larger multiplier means a stronger hit and ORDER BY stays ascending.
 hits="$(brains_sql "
   SELECT '- (' || m.type || ') ' || m.title || ': ' || m.body
   FROM memories_fts f
   JOIN memories m ON m.id = f.rowid
   WHERE m.project_id=${project_id} AND m.archived_at IS NULL AND f.memories_fts MATCH '${ematch}'
-  ORDER BY rank LIMIT 5;
+  ORDER BY f.rank
+    * CASE m.type
+        WHEN 'decision'   THEN 1.50
+        WHEN 'gotcha'     THEN 1.25
+        WHEN 'preference' THEN 1.15
+        WHEN 'state'      THEN 0.90
+        ELSE 1.00
+      END
+    * CASE
+        WHEN m.created_at >= datetime('now','-7 days')  THEN 1.30
+        WHEN m.created_at >= datetime('now','-30 days') THEN 1.15
+        WHEN m.created_at >= datetime('now','-90 days') THEN 1.00
+        ELSE 0.85
+      END
+  LIMIT 5;
 ")"
 
 [ -z "$hits" ] && exit 0
